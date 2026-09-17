@@ -3,6 +3,7 @@ package com.fruvio.GestionConge.type_conge.controller;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import com.fruvio.GestionConge.type_conge.entity.Type_conge;
 import com.fruvio.GestionConge.type_conge.service.Type_congeService;
@@ -10,6 +11,7 @@ import com.fruvio.GestionConge.type_conge.service.Type_congeService;
 @RestController
 @RequestMapping("/type-conge")
 @CrossOrigin(origins = "http://localhost:3000")
+@PreAuthorize("hasRole('ADMIN')")
 public class Type_congeController {
 
     private final Type_congeService typeCongeService;

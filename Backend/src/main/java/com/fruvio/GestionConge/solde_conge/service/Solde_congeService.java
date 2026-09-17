@@ -20,9 +20,20 @@ public class Solde_congeService {
         this.typeCongeRepository = typeCongeRepository;
     }
 
-    // Récupérer tous les soldes d’un utilisateur
+    // Récupérer tous les soldes d’un utilisateur (avec auto-initialisation si vide)
     public List<Solde_conge> getSoldesParUtilisateur(Long utilisateurId) {
-        return soldeCongeRepository.findByUtilisateurId(utilisateurId);
+        List<Solde_conge> soldes = soldeCongeRepository.findByUtilisateurId(utilisateurId);
+        if (soldes.isEmpty()) {
+            int annee = java.time.LocalDate.now().getYear();
+            initialiserSoldesPourUtilisateur(utilisateurId, annee);
+            soldes = soldeCongeRepository.findByUtilisateurId(utilisateurId);
+        }
+        return soldes;
+    }
+
+    // Récupérer tous les soldes
+    public List<Solde_conge> getAllSoldes() {
+        return soldeCongeRepository.findAll();
     }
 
     // Initialiser les soldes annuels pour un utilisateur

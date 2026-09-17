@@ -54,4 +54,16 @@ public class Demande_CongeController {
     public ResponseEntity<List<DemandeConge>> getDemandesEnAttenteManager(@PathVariable Long managerId) {
         return ResponseEntity.ok(congeService.getDemandesEnAttentePourManager(managerId));
     }
-}
+
+    // Liste de toutes les demandes en attente
+    @GetMapping("/en-attente")
+    public ResponseEntity<List<DemandeConge>> getToutesDemandesEnAttente() {
+        return ResponseEntity.ok(congeService.getToutesLesDemandesEnAttente());
+    }
+
+    // Liste de toutes les demandes
+    @GetMapping("/all")
+    public ResponseEntity<List<DemandeConge>> getAllDemandes() {
+        return ResponseEntity.ok(congeService.getToutesLesDemandes());
+    }
+}

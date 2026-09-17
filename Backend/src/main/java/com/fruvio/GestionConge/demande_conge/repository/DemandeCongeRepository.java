@@ -10,4 +10,6 @@ public interface DemandeCongeRepository extends JpaRepository<DemandeConge, Long
     List<DemandeConge> findByUtilisateurId(Long utilisateurId);
 
     List<DemandeConge> findByValideeParAndStatut(Long managerId, String statut);
+
+    List<DemandeConge> findByStatut(String statut);
 }

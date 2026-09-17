@@ -1,6 +1,5 @@
 package com.fruvio.GestionConge.demande_conge.entity;
 
-import java.sql.Date;
 import java.time.LocalDate;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -33,22 +32,23 @@ public class DemandeConge {
 
     @Column(name = "type_de_conge_id")
     private Long typeCongeId;
-    @JsonFormat(pattern = "MM/dd/yyyy")
+    @JsonFormat(pattern = "yyyy/MM/dd")
     private LocalDate dateDebut;
 
-    @JsonFormat(pattern = "MM/dd/yyyy")
+    @JsonFormat(pattern = "yyyy/MM/dd")
     private LocalDate dateFin;
 
-    private String commentaire; // motif du demandeur
+    private String commentaire;
 
-    private String statut; // EN_ATTENTE, VALIDEE, REFUSEE, ANNULEE
+    private String statut;
 
     @Column(name = "motif_refus")
-    private String motifRefus; // rempli par le manager
+    private String motifRefus;
 
     @Column(name = "validee_par")
-    private Long valideePar; // manager qui traite
+    private Long valideePar;
 
-    private Date dateValidation;
-    private Date dateCreation;
+    @Column (name = "date_validation")
+    private LocalDate dateValidation;
+    private LocalDate dateCreation;
 }

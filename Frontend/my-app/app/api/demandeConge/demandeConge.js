@@ -1,12 +1,38 @@
 const API_URL = "http://localhost:8080/conge";
 
 export const creerDemandeConge = async (utilisateurId, demandeData) => {
+  const formatDate = (date) => {
+    try{
+      
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    console.log(`${year}/${month}/${day}`);
+    return `${year}/${month}/${day}`;
+    }catch(error){
+      console.error("Erreur obtenue est: ",error.message);
+      throw error;
+    }
+  };
+
   const response = await fetch(`${API_URL}/demander/${utilisateurId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(demandeData),
+    body: JSON.stringify({
+      typeCongeId: Number(demandeData.typeCongeId),
+      dateDebut: formatDate(demandeData.debut),
+      dateFin: formatDate(demandeData.fin),
+      commentaire: demandeData.commentaire.trim(),
+    }),
   });
-  if (!response.ok) throw new Error("Erreur lors de la création de la demande");
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(
+      details || `Erreur lors de la création de la demande (${response.status})`,
+    );
+  }
   return await response.json();
 };
 
@@ -52,3 +78,18 @@ export const getDemandesEnAttenteManager = async (managerId) => {
     throw new Error("Erreur lors de la récupération des demandes du manager");
   return await response.json();
 };
+
+export const getToutesDemandesEnAttente = async () => {
+  const response = await fetch(`${API_URL}/en-attente`);
+  if (!response.ok)
+    throw new Error("Erreur lors de la récupération de toutes les demandes en attente");
+  return await response.json();
+};
+
+export const getAllDemandes = async () => {
+  const response = await fetch(`${API_URL}/all`);
+  if (!response.ok)
+    throw new Error("Erreur lors de la récupération de toutes les demandes");
+  return await response.json();
+};
+

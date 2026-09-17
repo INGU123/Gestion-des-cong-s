@@ -18,6 +18,12 @@ public class Solde_congeController {
         this.Solde_congeService = Solde_congeService;
     }
 
+    // Récupérer tous les soldes
+    @GetMapping({"", "/all"})
+    public ResponseEntity<List<Solde_conge>> getAllSoldes() {
+        return ResponseEntity.ok(Solde_congeService.getAllSoldes());
+    }
+
     // Récupérer tous les soldes d'un utilisateur (Congés Payés, Maladie, etc.)
     @GetMapping("/utilisateur/{utilisateurId}")
     public ResponseEntity<List<Solde_conge>> getSoldesParUtilisateur(@PathVariable Long utilisateurId) {

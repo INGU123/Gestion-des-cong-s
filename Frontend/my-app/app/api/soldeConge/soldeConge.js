@@ -25,17 +25,29 @@ export const initialiserSoldesAnnuels=async(utilisateurId,annee)=>{
     }
 }
 
-export const ajustSolde=async(soldeId,nouveauNombreJoursRestants)=>{
-    try{
-const response=await fetch(`${API_URL}/ajuster/${soldeId}?
-        nouveauNombreJoursRestants=${nouveauNombreJoursRestants}`,{
-            method:"PUT",
-        })
-        if(!response.ok)throw new Error("Erreur de mise a jour du solde");
-        return await response.json();
-    }catch(error){
-        console.error("Erreur obtenue :",error.message);
-        throw error;
-    }
-    
-}
+export const getAllSoldes = async () => {
+  try {
+    const response = await fetch(`${API_URL}/all`);
+    if (!response.ok) throw new Error("Erreur lors de la récupération des soldes");
+    return await response.json();
+  } catch (error) {
+    console.error("Erreur obtenue: ", error.message);
+    throw error;
+  }
+};
+
+export const ajustSolde = async (soldeId, nouveauNombreJoursRestants) => {
+  try {
+    const response = await fetch(
+      `${API_URL}/ajuster/${soldeId}?nouveauNombreJoursRestants=${encodeURIComponent(nouveauNombreJoursRestants)}`,
+      {
+        method: "PUT",
+      }
+    );
+    if (!response.ok) throw new Error("Erreur de mise à jour du solde");
+    return await response.json();
+  } catch (error) {
+    console.error("Erreur obtenue :", error.message);
+    throw error;
+  }
+};

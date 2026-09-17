@@ -5,8 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,10 +29,9 @@ public class Type_conge {
     private String justification_requis;
     private String couleur;
     private Boolean actif;
-    @ManyToOne
-    @JoinColumn(name = "type_conge_id", referencedColumnName = "id")
-    private Type_conge typeConge;
+
+   
     private boolean justificatifObligatoire;
     @Column(nullable = false)
-    private Integer nombreJoursParAn=0;
+    private Integer nombreJoursParAn = 0;
 }

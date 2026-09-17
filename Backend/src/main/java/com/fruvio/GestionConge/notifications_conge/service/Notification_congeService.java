@@ -37,4 +37,9 @@ public class Notification_congeService {
             notificationRepository.save(notification);
         }
     }
+
+    // Récupérer toutes les notifications d’un utilisateur
+    public List<Notification> getToutesNotifications(Long utilisateurId) {
+        return notificationRepository.findByUtilisateurId(utilisateurId);
+    }
 }
