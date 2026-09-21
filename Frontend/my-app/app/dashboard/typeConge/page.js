@@ -1,13 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   getAllTypeConge,
   creerTypeConge,
   deleteTypeConge,
 } from "../../api/typeConge/typeConge";
+import { getCurrentUser } from "@/lib/apiClient";
+import {
+  FolderKanban,
+  PlusCircle,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  ShieldAlert,
+  FileText,
+  Check,
+  X,
+  Clock,
+  Layers
+} from "lucide-react";
 
 export default function TypeCongePage() {
+  const [currentUser, setCurrentUser] = useState(null);
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -17,12 +32,13 @@ export default function TypeCongePage() {
     code: "",
     libelle: "",
     nombreJoursParAn: 30,
+    regle_acquisition: "STANDARD",
     justificatifObligatoire: false,
     couleur: "#2563eb",
     actif: true,
   });
 
-  const loadTypes = async () => {
+  const loadTypes = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getAllTypeConge();
@@ -32,11 +48,17 @@ export default function TypeCongePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    try {
+      const u = getCurrentUser();
+      if (u) setCurrentUser(u);
+    } catch (err) {
+      console.error("Erreur chargement utilisateur:", err);
+    }
     loadTypes();
-  }, []);
+  }, [loadTypes]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -57,8 +79,13 @@ export default function TypeCongePage() {
     setMsg({ type: "", text: "" });
     try {
       const payload = {
-        ...formData,
-        nombreJoursParAn: Number(formData.nombreJoursParAn) || 0,
+        code: formData.code.trim().toUpperCase(),
+        libelle: formData.libelle.trim(),
+        nombreJoursParAn: Math.round(Number(formData.nombreJoursParAn)) || 0,
+        regle_acquisition: formData.regle_acquisition || "STANDARD",
+        justificatifObligatoire: !!formData.justificatifObligatoire,
+        couleur: formData.couleur || "#2563eb",
+        actif: formData.actif !== false,
       };
       const created = await creerTypeConge(payload);
       setTypes((prev) => [...prev, created]);
@@ -66,6 +93,7 @@ export default function TypeCongePage() {
         code: "",
         libelle: "",
         nombreJoursParAn: 30,
+        regle_acquisition: "STANDARD",
         justificatifObligatoire: false,
         couleur: "#2563eb",
         actif: true,
@@ -93,29 +121,42 @@ export default function TypeCongePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
-          <span>📑</span> Configuration des Types de Congés
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Définissez les différentes catégories de congés, les quotas annuels et les règles justificatives.
-        </p>
+      {/* Banner Institutionnelle SPAT */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border-l-4 border-blue-600 flex justify-between items-center flex-wrap gap-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-1">
+            SPAT — Société du Port à Gestion Autonome de Toamasina
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <FolderKanban className="w-6 h-6 text-blue-400" />
+            Configuration des Types de Congés
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Définissez les différentes catégories d'absences, quotas annuels et règles d'imputation RH.
+          </p>
+        </div>
       </div>
 
       {msg.text && (
         <div
           className={`alert ${
             msg.type === "success" ? "alert-success text-white" : "alert-error text-white"
-          } shadow-sm`}
+          } shadow-sm rounded-xl flex items-center gap-2`}
         >
+          {msg.type === "success" ? (
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 shrink-0" />
+          )}
           <span>{msg.text}</span>
         </div>
       )}
 
       {/* Formulaire de création */}
       <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <span>➕</span> Nouveau Type de Congé
+        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <PlusCircle className="w-5 h-5 text-blue-600" />
+          Nouveau Type de Congé
         </h2>
         <form onSubmit={handleAddType} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -130,7 +171,7 @@ export default function TypeCongePage() {
                 onChange={handleChange}
                 placeholder="Ex: CP, RTT, MAL"
                 required
-                className="input input-bordered w-full uppercase font-mono"
+                className="input input-bordered w-full uppercase font-mono text-sm bg-white text-slate-800 focus:outline-hidden"
               />
             </div>
 
@@ -145,7 +186,7 @@ export default function TypeCongePage() {
                 onChange={handleChange}
                 placeholder="Ex: Congés Payés Annuels"
                 required
-                className="input input-bordered w-full"
+                className="input input-bordered w-full text-sm bg-white text-slate-800 focus:outline-hidden"
               />
             </div>
           </div>
@@ -162,7 +203,7 @@ export default function TypeCongePage() {
                 value={formData.nombreJoursParAn}
                 onChange={handleChange}
                 required
-                className="input input-bordered w-full"
+                className="input input-bordered w-full text-sm bg-white text-slate-800 focus:outline-hidden"
               />
             </div>
 
@@ -175,7 +216,7 @@ export default function TypeCongePage() {
                   onChange={handleChange}
                   className="checkbox checkbox-primary"
                 />
-                <span className="label-text font-medium text-slate-700">
+                <span className="label-text font-semibold text-slate-700 text-sm">
                   Justificatif obligatoire
                 </span>
               </label>
@@ -190,7 +231,7 @@ export default function TypeCongePage() {
                   onChange={handleChange}
                   className="checkbox checkbox-success"
                 />
-                <span className="label-text font-medium text-slate-700">
+                <span className="label-text font-semibold text-slate-700 text-sm">
                   Type actif
                 </span>
               </label>
@@ -201,15 +242,18 @@ export default function TypeCongePage() {
             <button
               type="submit"
               disabled={submitting}
-              className="btn btn-primary px-6"
+              className="btn btn-primary text-white font-semibold px-6 gap-2 shadow-xs"
             >
               {submitting ? (
                 <>
-                  <span className="loading loading-spinner loading-sm"></span>
+                  <span className="loading loading-spinner loading-xs"></span>
                   Ajout en cours...
                 </>
               ) : (
-                "Ajouter le type de congé"
+                <>
+                  <PlusCircle className="w-4 h-4" />
+                  Ajouter le type de congé
+                </>
               )}
             </button>
           </div>
@@ -218,8 +262,9 @@ export default function TypeCongePage() {
 
       {/* Liste des types */}
       <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <span>📋</span> Types de Congés Disponibles
+        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Layers className="w-5 h-5 text-blue-600" />
+          Types de Congés Disponibles
         </h2>
 
         {loading ? (
@@ -228,64 +273,68 @@ export default function TypeCongePage() {
           </div>
         ) : types.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
-            Aucun type de congé configuré pour le moment.
+            <FolderKanban className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+            <p className="font-semibold text-slate-600">Aucun type de congé configuré pour le moment.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="table w-full">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
-                  <th>Code</th>
-                  <th>Libellé</th>
-                  <th>Jours / an</th>
-                  <th>Justificatif</th>
-                  <th>Statut</th>
-                  <th className="text-right">Action</th>
+                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-3">Code</th>
+                  <th className="py-3">Libellé</th>
+                  <th className="py-3">Quota Ancien / An</th>
+                  <th className="py-3">Justificatif</th>
+                  <th className="py-3">Statut</th>
+                  <th className="py-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {types.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50/60 border-b border-slate-100">
-                    <td>
-                      <span className="badge badge-primary font-mono font-bold text-xs">
+                  <tr key={t.id} className="hover:bg-slate-50/80 transition-colors border-b border-slate-100">
+                    <td className="py-3.5">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md font-mono font-bold text-xs bg-blue-50 text-blue-700 border border-blue-200">
                         {t.code || `ID-${t.id}`}
                       </span>
                     </td>
-                    <td className="font-semibold text-slate-800">
+                    <td className="py-3.5 font-bold text-slate-800 text-sm">
                       {t.libelle || t.nom || "-"}
                     </td>
-                    <td className="font-bold text-blue-600">
+                    <td className="py-3.5 font-bold text-blue-600 text-sm">
                       {t.nombreJoursParAn ?? 0} jours
                     </td>
-                    <td>
+                    <td className="py-3.5">
                       {t.justificatifObligatoire ? (
-                        <span className="badge badge-warning badge-sm text-xs font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          <FileText className="w-3 h-3" />
                           Obligatoire
                         </span>
                       ) : (
-                        <span className="badge badge-ghost badge-sm text-xs text-slate-400">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium bg-slate-50 text-slate-500 border border-slate-200">
                           Non requis
                         </span>
                       )}
                     </td>
-                    <td>
+                    <td className="py-3.5">
                       {t.actif !== false ? (
-                        <span className="badge badge-success text-white badge-sm text-xs font-bold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <Check className="w-3 h-3" />
                           Actif
                         </span>
                       ) : (
-                        <span className="badge badge-ghost badge-sm text-xs text-slate-400">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium bg-slate-50 text-slate-400 border border-slate-200">
+                          <X className="w-3 h-3" />
                           Inactif
                         </span>
                       )}
                     </td>
-                    <td className="text-right">
+                    <td className="py-3.5 text-right">
                       <button
                         onClick={() => handleDelete(t.id)}
-                        className="btn btn-ghost btn-xs text-rose-600 hover:bg-rose-50"
-                        title="Supprimer"
+                        className="btn btn-ghost btn-xs text-rose-600 hover:bg-rose-50 font-semibold gap-1"
+                        title="Supprimer ce type de congé"
                       >
-                        🗑️ Supprimer
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </td>
                   </tr>
@@ -298,4 +347,3 @@ export default function TypeCongePage() {
     </div>
   );
 }
-

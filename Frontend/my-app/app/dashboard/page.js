@@ -2,9 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { 
+  CalendarDays, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  FileText, 
+  PieChart, 
+  PlusCircle, 
+  Eye 
+} from "lucide-react";
+
 import { getMesDemandes } from "../api/demandeConge/demandeConge";
 import { getSoldesUtilisateur } from "../api/soldeConge/soldeConge";
 import { getAllTypeConge } from "../api/typeConge/typeConge";
+import { getCurrentUser } from "@/lib/apiClient";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -16,12 +28,11 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const storedUser = localStorage.getItem("user");
-        if (!storedUser) {
+        const currentUser = getCurrentUser();
+        if (!currentUser) {
           setLoading(false);
           return;
         }
-        const currentUser = JSON.parse(storedUser);
         setUser(currentUser);
 
         const currentUserId = Number(currentUser.id);
@@ -68,146 +79,94 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl p-6 shadow-md flex justify-between items-center flex-wrap gap-4">
+      {/* Dynamic Institution Banner */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border-l-4 border-blue-600 flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">
-            Bonjour, {user?.prenom ? `${user.prenom} ${user.nom || ""}` : user?.email || "Collaborateur"} 👋
+          <div className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-1">
+            SPAT — Gestion des Congés & Permissions
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Bienvenue, {user?.prenom ? `${user.prenom} ${user.nom || ""}` : user?.email || "Agent SPAT"}
           </h1>
-          <p className="text-blue-100 text-sm mt-1">
-            Bienvenue sur votre espace de gestion des congés et absences.
+          <p className="text-slate-400 text-sm mt-1">
+            Consultation de vos soldes réglementaires et état du traitement de vos demandes.
           </p>
         </div>
         <div className="flex gap-3">
           <Link
             href="/dashboard/demande"
-            className="btn btn-warning btn-sm font-bold shadow"
+            className="btn btn-primary btn-sm font-semibold gap-2 shadow"
           >
-            + Nouvelle demande
+            <PlusCircle className="w-4 h-4" />
+            Nouvelle demande
           </Link>
           <Link
             href="/dashboard/solde"
-            className="btn btn-outline btn-sm text-white border-white hover:bg-white hover:text-blue-900"
+            className="btn btn-outline btn-sm text-slate-200 border-slate-600 hover:bg-slate-800 hover:text-white gap-2"
           >
+            <Eye className="w-4 h-4" />
             Consulter mes soldes
           </Link>
         </div>
       </div>
 
-      {/* KPI Stats Cards */}
+      {/* KPI Key Indicators */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-              Solde Restant
+              Solde Restant Global
             </p>
-            <p className="text-3xl font-extrabold text-blue-600 mt-1">
+            <p className="text-3xl font-bold text-slate-800 mt-1">
               {totalRestant}{" "}
-              <span className="text-sm font-medium text-slate-400">jours</span>
+              <span className="text-sm font-normal text-slate-500">jours</span>
             </p>
           </div>
-          <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">
-            🏖️
+          <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100">
+            <CalendarDays className="w-6 h-6" />
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-              En attente
+             {` En cours d'instruction`}
             </p>
-            <p className="text-3xl font-extrabold text-amber-500 mt-1">
+            <p className="text-3xl font-bold text-amber-600 mt-1">
               {enAttenteCount}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-2xl">
-            ⏳
+          <div className="w-12 h-12 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100">
+            <Clock className="w-6 h-6" />
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-              Validées
+              Demandes Validées
             </p>
-            <p className="text-3xl font-extrabold text-emerald-600 mt-1">
+            <p className="text-3xl font-bold text-emerald-600 mt-1">
               {valideCount}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-2xl">
-            ✅
+          <div className="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-              Refusées
+              Demandes Refusées
             </p>
-            <p className="text-3xl font-extrabold text-rose-500 mt-1">
+            <p className="text-3xl font-bold text-rose-600 mt-1">
               {refuseCount}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-2xl">
-            ❌
+          <div className="w-12 h-12 rounded-lg bg-rose-50 text-rose-700 flex items-center justify-center border border-rose-100">
+            <XCircle className="w-6 h-6" />
           </div>
-        </div>
-      </div>
-
-      {/* Quick Action Navigation */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <span>⚡</span> Accès Rapides
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Link
-            href="/dashboard/demande"
-            className="p-4 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-center"
-          >
-            <div className="text-2xl mb-1">📝</div>
-            <div className="font-semibold text-slate-800 text-sm">Poser un congé</div>
-            <div className="text-xs text-slate-400">Créer une demande</div>
-          </Link>
-
-          <Link
-            href="/dashboard/solde"
-            className="p-4 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-center"
-          >
-            <div className="text-2xl mb-1">📊</div>
-            <div className="font-semibold text-slate-800 text-sm">Mes Soldes</div>
-            <div className="text-xs text-slate-400">Détails par type</div>
-          </Link>
-
-          {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
-            <Link
-              href="/dashboard/validation"
-              className="p-4 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-center"
-            >
-              <div className="text-2xl mb-1">✅</div>
-              <div className="font-semibold text-slate-800 text-sm">Validation</div>
-              <div className="text-xs text-slate-400">Traiter les demandes</div>
-            </Link>
-          )}
-
-          {user?.role === "ADMIN" && (
-            <Link
-              href="/dashboard/typeConge"
-              className="p-4 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-center"
-            >
-              <div className="text-2xl mb-1">📑</div>
-              <div className="font-semibold text-slate-800 text-sm">Types de congés</div>
-              <div className="text-xs text-slate-400">Configuration</div>
-            </Link>
-          )}
-
-          <Link
-            href="/dashboard/parametre"
-            className="p-4 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-center"
-          >
-            <div className="text-2xl mb-1">⚙️</div>
-            <div className="font-semibold text-slate-800 text-sm">Paramètres</div>
-            <div className="text-xs text-slate-400">Mon profil</div>
-          </Link>
         </div>
       </div>
 
@@ -215,35 +174,36 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Demandes */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span>📋</span> Mes Dernières Demandes
+          <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              Dernières Demandes
             </h2>
             <Link
               href="/dashboard/demande"
-              className="text-xs font-semibold text-blue-600 hover:underline"
+              className="text-xs font-semibold text-blue-700 hover:text-blue-900"
             >
-              Voir tout →
+              {`Voir tout l'historique`} →
             </Link>
           </div>
 
           {demandes.length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-sm">
-              Aucune demande enregistrée pour l'instant.
+              {`Aucune demande enregistrée dans l'historique.`}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="table table-sm w-full">
                 <thead>
-                  <tr className="text-slate-500 border-b">
-                    <th>Type</th>
-                    <th>Dates</th>
+                  <tr className="text-slate-500 border-b text-xs">
+                    <th>Type de congé</th>
+                    <th>Période</th>
                     <th>Statut</th>
                   </tr>
                 </thead>
                 <tbody>
                   {demandes.slice(-5).reverse().map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50">
+                    <tr key={d.id} className="hover:bg-slate-50/80 border-b border-slate-100">
                       <td className="font-medium text-slate-800">
                         {getTypeLabel(d.typeCongeId)}
                       </td>
@@ -258,11 +218,11 @@ export default function Dashboard() {
                               : d.statut === "REFUSEE"
                               ? "badge-error text-white"
                               : d.statut === "ANNULEE"
-                              ? "badge-ghost"
+                              ? "badge-ghost text-slate-600"
                               : "badge-warning text-slate-800"
                           }`}
                         >
-                          {d.statut}
+                          {d.statut === "EN_ATTENTE" ? "En attente" : d.statut}
                         </span>
                       </td>
                     </tr>
@@ -275,46 +235,47 @@ export default function Dashboard() {
 
         {/* Soldes breakdown */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span>📊</span> Aperçu de mes Soldes
+          <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <PieChart className="w-5 h-5 text-blue-600" />
+              Répartition des Soldes
             </h2>
             <Link
               href="/dashboard/solde"
-              className="text-xs font-semibold text-blue-600 hover:underline"
+              className="text-xs font-semibold text-blue-700 hover:text-blue-900"
             >
-              Détails →
+              Consulter le détail →
             </Link>
           </div>
 
           {soldes.length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-sm">
-              Aucun solde initialisé pour le moment.
+              Aucun solde de congé initialisé.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="table table-sm w-full">
                 <thead>
-                  <tr className="text-slate-500 border-b">
-                    <th>Type</th>
-                    <th>Acquis</th>
-                    <th>Pris</th>
-                    <th>Restant</th>
+                  <tr className="text-slate-500 border-b text-xs">
+                    <th>Motif / Type</th>
+                    <th>Droits</th>
+                    <th>Consommés</th>
+                    <th>Solde restant</th>
                   </tr>
                 </thead>
                 <tbody>
                   {soldes.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50">
+                    <tr key={s.id} className="hover:bg-slate-50/80 border-b border-slate-100">
                       <td className="font-medium text-slate-800">
                         {getTypeLabel(s.typeCongeId)}
                       </td>
-                      <td className="text-blue-600 font-semibold">
+                      <td className="text-slate-600 font-medium">
                         {s.soldeAquis ?? s.soldeAcquis ?? 0} j
                       </td>
-                      <td className="text-rose-500 font-semibold">
+                      <td className="text-slate-600 font-medium">
                         {s.soldePris ?? 0} j
                       </td>
-                      <td className="text-emerald-600 font-bold">
+                      <td className="text-blue-700 font-bold">
                         {s.soldeRestant ?? 0} j
                       </td>
                     </tr>
@@ -328,4 +289,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

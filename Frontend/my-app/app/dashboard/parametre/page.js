@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getCurrentUser, authFetch } from "@/lib/apiClient";
 
 export default function Parametres() {
   const [userId, setUserId] = useState(null);
@@ -17,15 +18,14 @@ export default function Parametres() {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("user");
-      if (stored) {
-        const user = JSON.parse(stored);
+      const user = getCurrentUser();
+      if (user) {
         setUserId(user.id);
         setFormData({
           nom: user.nom || "",
           prenom: user.prenom || "",
           email: user.email || "",
-          mot_de_pass: user.mot_de_pass || "",
+          mot_de_pass: "",
           role: user.role || "EMPLOYE",
           notification: true,
         });
@@ -58,15 +58,13 @@ export default function Parametres() {
         role: formData.role,
       };
 
-      const res = await fetch("http://localhost:8080/utilisateur/update", {
+      const res = await authFetch("http://localhost:8080/utilisateur/update", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         const updatedUser = await res.json();
-        // Mettre à jour le localStorage pour que la topbar et les autres pages se rafraîchissent
         const stored = localStorage.getItem("user");
         const existing = stored ? JSON.parse(stored) : {};
         const merged = { ...existing, ...updatedUser };

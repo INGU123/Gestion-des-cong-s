@@ -1,45 +1,58 @@
-const API_URL="http://localhost:8080/solde";
+import { authFetch } from "@/lib/apiClient";
 
-export const getSoldesUtilisateur=async(utilisateurId)=>{
-    try{
-        const response=await fetch(`${API_URL}/utilisateur/${utilisateurId}`);
-    if(!response.ok)throw new Error("Erreur lors de la recuperation du solde de l'utilisateur");
-    return response.json();
-    }catch(error){
-        console.error("Erreur obtenue: ",error.message);
-        throw error;
+const API_URL = "http://localhost:8080/solde";
+
+export const getSoldesUtilisateur = async (utilisateurId) => {
+  if (!utilisateurId) return [];
+
+  try {
+    const response = await authFetch(`${API_URL}/utilisateur/${utilisateurId}`);
+    if (!response.ok) {
+      console.warn(`Avertissement HTTP getSoldesUtilisateur: ${response.status}`);
+      return [];
     }
-}
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn("Erreur obtenue lors de la récupération du solde: ", error.message);
+    return [];
+  }
+};
 
-export const initialiserSoldesAnnuels=async(utilisateurId,annee)=>{
-    try{
-        const response=await fetch(`${API_URL}/initialiser/${utilisateurId}?annee=${annee}`,{
-            method:"POST",
-        })
-            if(!response.ok)throw new Error("Erreur d'initialisation de solde annuelle");
-            return true;
-
-    }catch(error){
-        console.log("Erreur lors de l'initialisation ",error.message);
-        throw error;
-    }
-}
+export const initialiserSoldesAnnuels = async (utilisateurId, annee) => {
+  try {
+    const response = await authFetch(`${API_URL}/initialiser/${utilisateurId}?annee=${annee}`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Erreur d'initialisation de solde annuel");
+    return true;
+  } catch (error) {
+    console.warn("Erreur lors de l'initialisation: ", error.message);
+    throw error;
+  }
+};
 
 export const getAllSoldes = async () => {
   try {
-    const response = await fetch(`${API_URL}/all`);
-    if (!response.ok) throw new Error("Erreur lors de la récupération des soldes");
-    return await response.json();
+    const response = await authFetch(`${API_URL}/all`);
+    if (!response.ok) {
+      console.warn(`Avertissement HTTP getAllSoldes: ${response.status}`);
+      return [];
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.error("Erreur obtenue: ", error.message);
-    throw error;
+    console.warn("Erreur obtenue: ", error.message);
+    return [];
   }
 };
 
 export const ajustSolde = async (soldeId, nouveauNombreJoursRestants) => {
   try {
-    const response = await fetch(
-      `${API_URL}/ajuster/${soldeId}?nouveauNombreJoursRestants=${encodeURIComponent(nouveauNombreJoursRestants)}`,
+    const response = await authFetch(
+      `${API_URL}/ajuster/${soldeId}?nouveauNombreJoursRestants=${encodeURIComponent(
+        Math.round(Number(nouveauNombreJoursRestants))
+      )}`,
       {
         method: "PUT",
       }
@@ -47,7 +60,7 @@ export const ajustSolde = async (soldeId, nouveauNombreJoursRestants) => {
     if (!response.ok) throw new Error("Erreur de mise à jour du solde");
     return await response.json();
   } catch (error) {
-    console.error("Erreur obtenue :", error.message);
+    console.warn("Erreur obtenue lors de l'ajustement: ", error.message);
     throw error;
   }
-};
+};

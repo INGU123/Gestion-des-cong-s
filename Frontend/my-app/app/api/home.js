@@ -1,15 +1,17 @@
-"use client";
-
-const API_BASE_URL = "http://localhost:8080";
-
-export async function postData(endpoint, data) {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+export async function loginUser(matricule, password) {
+  const response = await fetch("http://localhost:8080/utilisateur/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      matricule: matricule,
+      password: password
+    }),
   });
+
   if (!response.ok) {
-    throw new Error(`Erreur API: ${response.status}`);
+    const errorText = await response.text();
+    throw new Error(errorText || "Matricule ou mot de passe incorrect.");
   }
+
   return await response.json();
 }

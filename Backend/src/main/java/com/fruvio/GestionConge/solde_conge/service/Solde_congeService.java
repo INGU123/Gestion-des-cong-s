@@ -42,15 +42,15 @@ public class Solde_congeService {
         List<Type_conge> types = typeCongeRepository.findAll();
 
         for (Type_conge type : types) {
-            if (!soldeCongeRepository.existsByUtilisateurIdAndTypeCongeIdAndPeriode(utilisateurId, type.getId(),
-                    annee)) {
+            if (!soldeCongeRepository.existsByUtilisateurIdAndTypeCongeIdAndPeriode(utilisateurId, type.getId(), annee)) {
                 Solde_conge solde = new Solde_conge();
                 solde.setUtilisateurId(utilisateurId);
                 solde.setTypeCongeId(type.getId());
                 solde.setPeriode(annee);
-                solde.setSoldeAquis(type.getNombreJoursParAn());
+                int nbJours = (type.getNombreJoursParAn() != null) ? type.getNombreJoursParAn() : 0;
+                solde.setSoldeAquis(nbJours);
                 solde.setSoldePris(0);
-                solde.setSoldeRestant(type.getNombreJoursParAn());
+                solde.setSoldeRestant(nbJours);
                 solde.setDate_maj(new Timestamp(System.currentTimeMillis()));
 
                 soldeCongeRepository.save(solde);
@@ -58,7 +58,7 @@ public class Solde_congeService {
         }
     }
 
-    // Ajuster manuellement le solde
+    // Ajuster manuellement le solde (réservé à l'Admin)
     @Transactional
     public Solde_conge ajusterSolde(Long soldeId, int nouveauNombreJoursRestants) {
         Solde_conge solde = soldeCongeRepository.findById(soldeId)

@@ -18,19 +18,18 @@ public class Historique_mouvementService {
     }
 
     @Transactional
-    public void enregistrerMouvement(Long utilisateurId, String typeMouvement, double quantite, Long type_conge_id,
+    public void enregistrerMouvement(Long utilisateurId, String typeMouvement, Integer quantite, Long type_conge_id,
             Long demande_id, String commentaire, Long effectue_par) {
         Historique_mouvement mouvement = new Historique_mouvement();
 
-        // ⚠️ Correction : j’utilise les setters EXACTS de ton entity (avec underscores)
         mouvement.setUtilisateurId(utilisateurId);
         mouvement.setTypeMouvement(typeMouvement);
-        mouvement.setQuantite(quantite);
+        mouvement.setQuantite(quantite != null ? quantite : 0);
         mouvement.setType_conge_id(type_conge_id);
         mouvement.setDemande_id(demande_id);
         mouvement.setCommentaire(commentaire);
         mouvement.setEffectue_par(effectue_par);
-        mouvement.setDate(new Date(System.currentTimeMillis())); // date actuelle
+        mouvement.setDate(new Date(System.currentTimeMillis()));
 
         historique_mouvementRepository.save(mouvement);
     }

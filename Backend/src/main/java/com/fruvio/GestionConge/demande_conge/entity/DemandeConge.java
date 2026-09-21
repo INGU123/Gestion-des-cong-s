@@ -1,20 +1,18 @@
 package com.fruvio.GestionConge.demande_conge.entity;
 
 import java.time.LocalDate;
-
 import com.fasterxml.jackson.annotation.JsonFormat;
-
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -28,15 +26,20 @@ public class DemandeConge {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long utilisateurId; // celui qui demande
+    @Column(name = "utilisateur_id")
+    private Long utilisateurId;
 
     @Column(name = "type_de_conge_id")
     private Long typeCongeId;
-    @JsonFormat(pattern = "yyyy/MM/dd")
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateDebut;
 
-    @JsonFormat(pattern = "yyyy/MM/dd")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateFin;
+
+    @Column(name = "nombre_jours")
+    private Integer nombreJours;
 
     private String commentaire;
 
@@ -48,7 +51,9 @@ public class DemandeConge {
     @Column(name = "validee_par")
     private Long valideePar;
 
-    @Column (name = "date_validation")
+    @Column(name = "date_validation")
     private LocalDate dateValidation;
+
+    @Column(name = "date_creation")
     private LocalDate dateCreation;
 }

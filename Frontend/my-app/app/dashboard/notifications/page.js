@@ -7,6 +7,18 @@ import {
   marquerNotificationLue,
 } from "../../api/notificationConge/notificationConge";
 
+import { getCurrentUser } from "@/lib/apiClient";
+import {
+  Bell,
+  BellOff,
+  CheckCircle2,
+  XCircle,
+  Info,
+  Check,
+  Calendar,
+  Filter
+} from "lucide-react";
+
 export default function NotificationsPage() {
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([]);
@@ -14,14 +26,9 @@ export default function NotificationsPage() {
   const [filterNonLues, setFilterNonLues] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("user");
-    if (stored) {
-      try {
-        const u = JSON.parse(stored);
-        setUser(u);
-      } catch (e) {
-        console.error(e);
-      }
+    const u = getCurrentUser();
+    if (u) {
+      setUser(u);
     }
   }, []);
 
@@ -57,34 +64,62 @@ export default function NotificationsPage() {
     }
   };
 
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case "VALIDATION":
+        return <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />;
+      case "REFUS":
+        return <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />;
+      default:
+        return <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />;
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
+      {/* Banner Institutionnelle SPAT */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border-l-4 border-blue-600 flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
-            <span>🔔</span> Centre de Notifications
+          <div className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-1">
+            SPAT — Société du Port à Gestion Autonome de Toamasina
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Bell className="w-6 h-6 text-blue-400" />
+            Centre de Notifications
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Suivez en direct l'état d'avancement de vos demandes et activités.
+          <p className="text-slate-400 text-sm mt-1">
+            {`Suivez en direct l'état d'avancement de vos demandes et des alertes de votre compte.`}
           </p>
         </div>
 
-        <div className="join">
+        {/* Filtrage par état de lecture */}
+        <div className="inline-flex p-1 bg-slate-800 rounded-xl border border-slate-700">
           <button
             onClick={() => setFilterNonLues(false)}
-            className={`join-item btn btn-sm ${!filterNonLues ? "btn-primary" : "btn-outline"}`}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              !filterNonLues
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-300 hover:text-white"
+            }`}
           >
+            <Filter className="w-3.5 h-3.5" />
             Toutes
           </button>
           <button
             onClick={() => setFilterNonLues(true)}
-            className={`join-item btn btn-sm ${filterNonLues ? "btn-primary" : "btn-outline"}`}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              filterNonLues
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-300 hover:text-white"
+            }`}
           >
+            <Bell className="w-3.5 h-3.5" />
             Non lues uniquement
           </button>
         </div>
       </div>
 
+      {/* Liste des Notifications */}
       <div className="space-y-3">
         {loading ? (
           <div className="flex justify-center items-center py-16">
@@ -92,9 +127,11 @@ export default function NotificationsPage() {
           </div>
         ) : notifications.length === 0 ? (
           <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
-            <span className="text-4xl block mb-2">🔕</span>
-            <p className="font-semibold text-slate-600">Aucune notification pour le moment.</p>
-            <p className="text-sm mt-1">Vous serez notifié dès qu'une demande est soumise, validée ou refusée.</p>
+            <BellOff className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <p className="font-semibold text-slate-600 text-base">Aucune notification pour le moment.</p>
+            <p className="text-sm mt-1 text-slate-400">
+             {` Vous serez notifié dès qu'une demande de congé est soumise, validée ou refusée.`}
+            </p>
           </div>
         ) : (
           notifications.slice().reverse().map((n) => (
@@ -103,27 +140,22 @@ export default function NotificationsPage() {
               className={`p-4 rounded-xl border transition-all flex items-start justify-between gap-4 ${
                 n.lue
                   ? "bg-white border-slate-200 text-slate-700"
-                  : "bg-blue-50/70 border-blue-200 text-slate-900 shadow-sm"
+                  : "bg-blue-50/60 border-blue-200 text-slate-900 shadow-xs"
               }`}
             >
-              <div className="flex gap-3 items-start">
-                <span className="text-2xl mt-0.5">
-                  {n.type === "VALIDATION"
-                    ? "✅"
-                    : n.type === "REFUS"
-                    ? "❌"
-                    : "ℹ️"}
-                </span>
+              <div className="flex gap-3.5 items-start">
+                {getNotificationIcon(n.type)}
                 <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-sm">{n.contenu}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm leading-snug">{n.contenu}</p>
                     {!n.lue && (
-                      <span className="badge badge-xs badge-primary font-bold">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white uppercase tracking-wider">
                         Nouveau
                       </span>
                     )}
                   </div>
-                  <span className="text-xs text-slate-400 mt-1 block">
+                  <span className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
                     {n.date_envoi ? new Date(n.date_envoi).toLocaleDateString("fr-FR") : "Aujourd'hui"}
                   </span>
                 </div>
@@ -132,8 +164,9 @@ export default function NotificationsPage() {
               {!n.lue && (
                 <button
                   onClick={() => handleMarquerLue(n.id)}
-                  className="btn btn-ghost btn-xs text-blue-600 hover:bg-blue-100 shrink-0"
+                  className="btn btn-ghost btn-xs text-blue-600 hover:bg-blue-100 hover:text-blue-700 shrink-0 gap-1"
                 >
+                  <Check className="w-3.5 h-3.5" />
                   Marquer comme lue
                 </button>
               )}

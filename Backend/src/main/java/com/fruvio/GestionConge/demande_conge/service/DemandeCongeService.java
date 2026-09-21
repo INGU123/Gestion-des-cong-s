@@ -35,10 +35,19 @@ public class DemandeCongeService {
     }
 
     // Créer une demande
+    @Transactional
     public DemandeConge creerDemande(Long utilisateurId, DemandeConge demande) {
         demande.setUtilisateurId(utilisateurId);
         demande.setStatut("EN_ATTENTE");
         demande.setDateCreation(LocalDate.now());
+
+        if (demande.getDateDebut() != null && demande.getDateFin() != null) {
+            long diff = ChronoUnit.DAYS.between(demande.getDateDebut(), demande.getDateFin()) + 1;
+            demande.setNombreJours((int) Math.max(1, diff));
+        } else {
+            demande.setNombreJours(1);
+        }
+
         DemandeConge saved = demandeRepo.save(demande);
 
         try {
@@ -53,50 +62,71 @@ public class DemandeCongeService {
         return saved;
     }
 
-    // Traiter une demande (manager)
+    // Traiter une demande (manager / admin)
     @Transactional
     public DemandeConge traiterDemande(Long demandeId, Long managerId, String statut, String motifRefus) {
         DemandeConge demande = demandeRepo.findById(demandeId)
-                .orElseThrow(() -> new IllegalArgumentException("Demande non trouvée"));
+                .orElseThrow(() -> new IllegalArgumentException("Demande non trouvée avec l'ID : " + demandeId));
+
         demande.setValideePar(managerId);
         demande.setStatut(statut);
         demande.setDateValidation(LocalDate.now());
-        if ("REFUSEE".equals(statut)) {
+
+        if ("REFUSEE".equalsIgnoreCase(statut)) {
             demande.setMotifRefus(motifRefus);
         }
-        DemandeConge saved = demandeRepo.save(demande);
 
-        // Si la demande est validée, déduire du solde et enregistrer dans l'historique
-        if ("VALIDEE".equals(statut) && demande.getDateDebut() != null && demande.getDateFin() != null) {
-            long jours = ChronoUnit.DAYS.between(demande.getDateDebut(), demande.getDateFin()) + 1;
-            if (jours <= 0) jours = 1;
+        // Vérification flexible du statut ("VALIDE", "VALIDEE", "APPROVED", etc.)
+        boolean estValidee = "VALIDEE".equalsIgnoreCase(statut) || "VALIDE".equalsIgnoreCase(statut) || "APPROVED".equalsIgnoreCase(statut);
+
+        // Si la demande est validée, déduire du solde
+        if (estValidee && demande.getDateDebut() != null && demande.getDateFin() != null) {
+            long joursLong = ChronoUnit.DAYS.between(demande.getDateDebut(), demande.getDateFin()) + 1;
+            int jours = (int) Math.max(1, joursLong);
+            demande.setNombreJours(jours);
 
             int annee = demande.getDateDebut().getYear();
+
             if (demande.getTypeCongeId() != null && demande.getUtilisateurId() != null) {
+                
+                // Recherche du solde correspondant
                 Optional<Solde_conge> soldeOpt = soldeRepo.findByUtilisateurIdAndTypeCongeIdAndPeriode(
                     demande.getUtilisateurId(), demande.getTypeCongeId(), annee
                 );
+
                 if (soldeOpt.isPresent()) {
                     Solde_conge solde = soldeOpt.get();
-                    solde.setSoldePris(solde.getSoldePris() + jours);
-                    solde.setSoldeRestant(Math.max(0, solde.getSoldeRestant() - jours));
+                    int prisActuel = (solde.getSoldePris() != null) ? solde.getSoldePris() : 0;
+                    int acquisActuel = (solde.getSoldeAquis() != null) ? solde.getSoldeAquis() : 0;
+
+                    int nouveauSoldePris = prisActuel + jours;
+                    solde.setSoldePris(nouveauSoldePris);
+                    solde.setSoldeRestant(Math.max(0, acquisActuel - nouveauSoldePris));
                     solde.setDate_maj(new Timestamp(System.currentTimeMillis()));
+
+                    // Déclenche explicitement le UPDATE SQL sur la table solde_conge
                     soldeRepo.save(solde);
+                } else {
+                    throw new IllegalStateException("Erreur : Aucun solde trouvé pour l'utilisateur #" 
+                        + demande.getUtilisateurId() + ", le type de congé #" + demande.getTypeCongeId() 
+                        + " et la période " + annee);
                 }
 
+                // Enregistrement de l'historique
                 try {
                     historiqueService.enregistrerMouvement(
                         demande.getUtilisateurId(),
                         "DEBIT_CONGE",
-                        (double) jours,
+                        jours,
                         demande.getTypeCongeId(),
                         demande.getId(),
-                        "Congé validé par manager #" + managerId,
+                        "Congé validé par validateur #" + managerId,
                         managerId
                     );
                 } catch (Exception ignored) {}
             }
 
+            // Notification de validation
             try {
                 notificationService.creerNotification(
                     demande.getUtilisateurId(),
@@ -105,7 +135,9 @@ public class DemandeCongeService {
                     "/dashboard/demande"
                 );
             } catch (Exception ignored) {}
-        } else if ("REFUSEE".equals(statut)) {
+
+        } else if ("REFUSEE".equalsIgnoreCase(statut)) {
+            // Notification de refus
             try {
                 notificationService.creerNotification(
                     demande.getUtilisateurId(),
@@ -117,13 +149,16 @@ public class DemandeCongeService {
             } catch (Exception ignored) {}
         }
 
-        return saved;
+        return demandeRepo.save(demande);
     }
 
     // Annuler une demande (utilisateur)
+    @Transactional
     public DemandeConge annulerDemande(Long demandeId, Long utilisateurId) {
-        DemandeConge demande = demandeRepo.findById(demandeId).orElseThrow();
-        if (demande.getUtilisateurId().equals(utilisateurId) && "EN_ATTENTE".equals(demande.getStatut())) {
+        DemandeConge demande = demandeRepo.findById(demandeId)
+                .orElseThrow(() -> new IllegalArgumentException("Demande non trouvée avec l'ID : " + demandeId));
+
+        if (demande.getUtilisateurId().equals(utilisateurId) && "EN_ATTENTE".equalsIgnoreCase(demande.getStatut())) {
             demande.setStatut("ANNULEE");
         }
         return demandeRepo.save(demande);
@@ -146,8 +181,6 @@ public class DemandeCongeService {
 
     // Récupérer les demandes en attente pour un manager
     public List<DemandeConge> getDemandesEnAttentePourManager(Long managerId) {
-        // Renvoie toutes les demandes en attente pour validation
         return demandeRepo.findByStatut("EN_ATTENTE");
     }
 }
-

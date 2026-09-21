@@ -8,38 +8,54 @@ import com.fruvio.GestionConge.type_conge.repository.Type_congeRepository;
 @Service
 public class Type_congeService {
 
-    private final Type_congeRepository Type_congeRepository;
+    private final Type_congeRepository typeCongeRepository;
 
-    public Type_congeService(Type_congeRepository Type_congeRepository) {
-        this.Type_congeRepository = Type_congeRepository;
+    public Type_congeService(Type_congeRepository typeCongeRepository) {
+        this.typeCongeRepository = typeCongeRepository;
     }
 
-    public Type_conge save(Type_conge Type_conge) {
-        return Type_congeRepository.save(Type_conge);
+    public Type_conge save(Type_conge typeConge) {
+        if (typeConge.getRegle_acquisition() == null || typeConge.getRegle_acquisition().trim().isEmpty()) {
+            typeConge.setRegle_acquisition("STANDARD");
+        }
+        if (typeConge.getNombreJoursParAn() == null) {
+            typeConge.setNombreJoursParAn(0);
+        }
+        if (typeConge.getActif() == null) {
+            typeConge.setActif(true);
+        }
+        if (typeConge.getCouleur() == null || typeConge.getCouleur().trim().isEmpty()) {
+            typeConge.setCouleur("#2563eb");
+        }
+        return typeCongeRepository.save(typeConge);
     }
 
     public List<Type_conge> findAll() {
-        return Type_congeRepository.findAll();
+        return typeCongeRepository.findAll();
     }
 
     public Type_conge findById(Long id) {
-        return Type_congeRepository.findById(id).orElse(null);
+        return typeCongeRepository.findById(id).orElse(null);
     }
 
     public Type_conge update(Long id, Type_conge details) {
         Type_conge existant = findById(id);
         if (existant != null) {
-            existant.setLibelle(details.getLibelle());
-            existant.setNombreJoursParAn(details.getNombreJoursParAn());
+            if (details.getCode() != null) existant.setCode(details.getCode());
+            if (details.getLibelle() != null) existant.setLibelle(details.getLibelle());
+            if (details.getNombreJoursParAn() != null) existant.setNombreJoursParAn(details.getNombreJoursParAn());
             existant.setJustificatifObligatoire(details.isJustificatifObligatoire());
-            return Type_congeRepository.save(existant);
+            if (details.getActif() != null) existant.setActif(details.getActif());
+            if (details.getCouleur() != null) existant.setCouleur(details.getCouleur());
+            if (details.getRegle_acquisition() != null) existant.setRegle_acquisition(details.getRegle_acquisition());
+            return typeCongeRepository.save(existant);
         }
         return null;
     }
 
     public boolean deleteById(Long id) {
-        if (Type_congeRepository.existsById(id)) {
-            Type_congeRepository.deleteById(id);
+        if (typeCongeRepository.existsById(id)) {
+            typeCongeRepository.deleteById(id);
             return true;
         }
         return false;

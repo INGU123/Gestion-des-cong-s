@@ -1,11 +1,12 @@
 "use client";
+
 import { loginUser } from "@/lib/apiLogin.js";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const Home = () => {
-  const [email, setEmail] = useState("");
+  const [matricule, setMatricule] = useState("");
   const [motDePass, setMotDePass] = useState("");
   const [error, setError] = useState("");
   const [mdpSee, setMdpSee] = useState(false);
@@ -16,13 +17,20 @@ const Home = () => {
     setError("");
 
     try {
-      const user = await loginUser(email, motDePass);
+      const data = await loginUser(matricule, motDePass);
 
-      localStorage.setItem("user", JSON.stringify(user));
+      if (data?.token) {
+        localStorage.setItem("token", data.token);
+      }
+      if (data?.utilisateur) {
+        localStorage.setItem("user", JSON.stringify(data.utilisateur));
+      } else {
+        localStorage.setItem("user", JSON.stringify(data));
+      }
 
       router.push("/dashboard");
     } catch (err) {
-      setError("Email ou mot de passe incorrect. " + err);
+      setError(err.message || "Matricule ou mot de passe incorrect.");
     }
   };
 
@@ -61,17 +69,17 @@ const Home = () => {
             </div>
           )}
 
-          {/* Champ Email */}
+          {/* Champ Matricule */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-600 block">
-              Adresse e-mail
+              Matricule
             </label>
             <input
-              type="email"
+              type="text"
               className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#023E8A] focus:bg-white transition-all"
-              placeholder="nom@port-toamasina.mg"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Ex: MTR-2026-001"
+              value={matricule}
+              onChange={(e) => setMatricule(e.target.value)}
               required
             />
           </div>
@@ -85,19 +93,30 @@ const Home = () => {
               <input
                 type={mdpSee ? "text" : "password"}
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#023E8A] focus:bg-white transition-all pr-10"
-                placeholder="mot de pass..."
+                placeholder="mot de passe..."
                 value={motDePass}
                 onChange={(e) => setMotDePass(e.target.value)}
                 required
               />
               <button
-                type="button"
-                onClick={() => setMdpSee(!mdpSee)}
-                className="absolute right-3 text-slate-400 hover:text-slate-600 text-sm focus:outline-none"
-                aria-label="Afficher ou masquer le mot de passe"
-              >
-                {mdpSee ? "🙈" : "👁️"}
-              </button>
+  type="button"
+  onClick={() => setMdpSee(!mdpSee)}
+  className="absolute right-3 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+  aria-label="Afficher ou masquer le mot de passe"
+>
+  {mdpSee ? (
+    /* Icône Œil Barré (Masqué) */
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+    </svg>
+  ) : (
+    /* Icône Œil (Visible) */
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12c1.274 4.057 5.065 7 9.542 7 4.477 0 8.268-2.943 9.542-7-1.274-4.057-5.064-7-9.542-7-4.477 0-8.268 2.943-9.542 7z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  )}
+</button>
             </div>
           </div>
 
@@ -122,8 +141,7 @@ const Home = () => {
           {/* Pied de carte */}
           <div className="pt-4 border-t border-slate-100 text-center">
             <p className="text-[10px] text-slate-400">
-              © {new Date().getFullYear()} SPAT Madagascar. Tous droits
-              réservés.
+              © {new Date().getFullYear()} SPAT Madagascar. Tous droits réservés.
             </p>
           </div>
         </form>

@@ -24,13 +24,35 @@ public class Solde_conge {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "utilisateur_id")
     private Long utilisateurId;
+
     @Column(name = "type_conge_id")
     private Long typeCongeId;
-    private double soldeAquis;
-    private double soldePris;
-    private double soldeRestant;
+
+    @Builder.Default
+    @Column(name = "solde_aquis")
+    private Integer soldeAquis = 0;
+
+    @Builder.Default
+    @Column(name = "solde_pris")
+    private Integer soldePris = 0;
+
+    @Builder.Default
+    @Column(name = "solde_restant")
+    private Integer soldeRestant = 0;
+
     private int periode;
+
     private Timestamp date_maj;
-    
+
+    // Alias pour compatibilité
+    public Integer getSoldeAcquis() {
+        return soldeAquis;
+    }
+
+    public void setSoldeAcquis(Integer soldeAcquis) {
+        this.soldeAquis = soldeAcquis;
+    }
 }

@@ -33,23 +33,54 @@ public class SecurityConfig {
     }
 
     @Bean
-public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    http
-        .csrf(csrf -> csrf.disable())
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-            .requestMatchers("/utilisateur/login").permitAll()   // ← AJOUTÉ
-            .requestMatchers(HttpMethod.POST, "/utilisateur/create").hasRole("ADMIN")
-            .requestMatchers("/utilisateur/all").hasRole("ADMIN")
-            .requestMatchers("/auth/login", "/auth/register").permitAll()
-            .anyRequest().authenticated()
-        )
-        .sessionManagement(session -> session
-            .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-        )
-        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
-    return http.build();
-}
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .cors(Customizer.withDefaults())
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+                // Requêtes préflight CORS et authentification publique
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/utilisateur/login").permitAll()
+                .requestMatchers("/utilisateur/forgot-password").permitAll() // Autorise la réinitialisation sans token
+                .requestMatchers("/auth/**").permitAll()
+                .requestMatchers("/error").permitAll()
+
+                // Configuration des types de congés : consultation libre, écriture Admin
+                .requestMatchers(HttpMethod.GET, "/type-conge/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers("/type-conge/**").hasRole("ADMIN")
+
+                // Gestion des utilisateurs : Admin
+                .requestMatchers(HttpMethod.POST, "/utilisateur/create").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/utilisateur/update").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers("/utilisateur/all").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/utilisateur/{id}").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+
+                // Soldes : Le manager ne contrôle pas le solde -> ajustement/init réservés à ADMIN
+                .requestMatchers(HttpMethod.POST, "/solde/initialiser/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/solde/ajuster/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/solde/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+
+                // Demandes de congé : Traitement pour Admin et Manager
+                .requestMatchers(HttpMethod.PUT, "/conge/*/traiter").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/conge/manager/**").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/conge/en-attente").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/conge/all").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers("/conge/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+
+                // Notifications et Historique
+                .requestMatchers("/notification/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers("/historiques/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers("/services/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+
+                .anyRequest().authenticated()
+            )
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider(
@@ -68,7 +99,12 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://127.0.0.1:3000"));
+        
+        // On vide explicitement toute configuration d'origines précédente
+        configuration.setAllowedOrigins(null); 
+        
+        // On définit les origines autorisées via Pattern
+        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:3000", "http://127.0.0.1:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

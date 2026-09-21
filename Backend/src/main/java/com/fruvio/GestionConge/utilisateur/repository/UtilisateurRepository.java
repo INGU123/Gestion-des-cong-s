@@ -8,7 +8,8 @@ import com.fruvio.GestionConge.utilisateur.entity.Utilisateur;
 
 @Repository
 public interface UtilisateurRepository extends JpaRepository<Utilisateur, Long> {
+    Optional<Utilisateur> findByMatricule(String matricule);
+    Optional<Utilisateur> findByNomAndPrenom(String nom, String prenom);
     Optional<Utilisateur> findByEmail(String email);
-    Utilisateur findByNomAndPrenom(String nom, String prenom);
+    Optional<Utilisateur> findByResetToken(String resetToken);
 }
-

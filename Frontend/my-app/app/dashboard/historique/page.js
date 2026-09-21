@@ -6,9 +6,22 @@ import {
   getHistoriqueUtilisateur,
 } from "../../api/historiqueMouvements/historiqueMouvement";
 import { getAllTypeConge } from "../../api/typeConge/typeConge";
+import { getCurrentUser, authFetch } from "@/lib/apiClient";
+import {
+  History,
+  User,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Calendar,
+  MessageSquare,
+  Users,
+  CheckCircle2,
+  Layers,
+  ShieldCheck
+} from "lucide-react";
 
 export default function HistoriquePage() {
-  const [user, setUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [mouvements, setMouvements] = useState([]);
   const [typesConge, setTypesConge] = useState([]);
   const [utilisateurs, setUtilisateurs] = useState([]);
@@ -16,51 +29,59 @@ export default function HistoriquePage() {
   const [viewAll, setViewAll] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("user");
-    if (stored) {
+    let isMounted = true;
+
+    async function fetchData() {
+      const user = getCurrentUser();
+      if (!user) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
+      if (isMounted) {
+        setCurrentUser(user);
+        const isManagerRole = user.role === "ADMIN" || user.role === "MANAGER";
+        setViewAll(isManagerRole);
+      }
+
       try {
-        const u = JSON.parse(stored);
-        setUser(u);
-        const isManager = u.role === "ADMIN" || u.role === "MANAGER";
-        setViewAll(isManager);
-      } catch (e) {
-        console.error(e);
+        if (isMounted) setLoading(true);
+        const isManager = user.role === "ADMIN" || user.role === "MANAGER";
+
+        const [mouvementsData, typesData, usersRes] = await Promise.all([
+          viewAll && isManager
+            ? getAllHistorique()
+            : getHistoriqueUtilisateur(user.id),
+          getAllTypeConge().catch(() => []),
+          authFetch("http://localhost:8080/utilisateur/all")
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => []),
+        ]);
+
+        if (isMounted) {
+          setMouvements(Array.isArray(mouvementsData) ? mouvementsData : []);
+          setTypesConge(Array.isArray(typesData) ? typesData : []);
+          setUtilisateurs(Array.isArray(usersRes) ? usersRes : []);
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement :", err);
+        if (isMounted) setMouvements([]);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
-  }, []);
 
-  const loadData = async () => {
-    if (!user) return;
-    try {
-      setLoading(true);
-      const isManager = user.role === "ADMIN" || user.role === "MANAGER";
-      const [mouvementsData, typesData, usersData] = await Promise.all([
-        (viewAll && isManager)
-          ? getAllHistorique().catch(() => [])
-          : getHistoriqueUtilisateur(user.id).catch(() => []),
-        getAllTypeConge().catch(() => []),
-        fetch("http://localhost:8080/utilisateur/all").then((r) => r.json()).catch(() => []),
-      ]);
-      setMouvements(Array.isArray(mouvementsData) ? mouvementsData : []);
-      setTypesConge(Array.isArray(typesData) ? typesData : []);
-      setUtilisateurs(Array.isArray(usersData) ? usersData : []);
-    } catch (err) {
-      console.error("Erreur chargement historique:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchData();
 
-  useEffect(() => {
-    if (user) {
-      loadData();
-    }
-  }, [user, viewAll]);
+    return () => {
+      isMounted = false;
+    };
+  }, [viewAll]);
 
   const getUserName = (userId) => {
     const found = utilisateurs.find((u) => u.id === userId);
     if (!found) return `Utilisateur #${userId}`;
-    return found.prenom ? `${found.prenom} ${found.nom}` : found.email;
+    return found.prenom ? `${found.prenom} ${found.nom || ""}` : found.email;
   };
 
   const getTypeLabel = (typeId) => {
@@ -68,38 +89,55 @@ export default function HistoriquePage() {
     return found?.libelle || found?.code || `Type #${typeId}`;
   };
 
-  const isManager = user?.role === "ADMIN" || user?.role === "MANAGER";
+  const isManager = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
+      {/* Banner Institutionnelle SPAT */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border-l-4 border-blue-600 flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
-            <span>📜</span> Historique des Mouvements
+          <div className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-1">
+            SPAT — Société du Port à Gestion Autonome de Toamasina
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <History className="w-6 h-6 text-blue-400" />
+            {`Historique des Mouvements & Journal d'Audit`}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Traçabilité complète des débits, crédits et ajustements de soldes de congés.
+          <p className="text-slate-400 text-sm mt-1">
+            Traçabilité complète des débits, crédits, ajustements et régularisations de soldes de congés.
           </p>
         </div>
 
+        {/* Boutons de bascule d'affichage pour les managers/admins */}
         {isManager && (
-          <div className="join">
+          <div className="inline-flex p-1 bg-slate-800 rounded-xl border border-slate-700">
             <button
               onClick={() => setViewAll(false)}
-              className={`join-item btn btn-sm ${!viewAll ? "btn-primary" : "btn-outline"}`}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+                !viewAll
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-300 hover:text-white"
+              }`}
             >
+              <User className="w-3.5 h-3.5" />
               Mes mouvements
             </button>
             <button
               onClick={() => setViewAll(true)}
-              className={`join-item btn btn-sm ${viewAll ? "btn-primary" : "btn-outline"}`}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+                viewAll
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-300 hover:text-white"
+              }`}
             >
+              <Users className="w-3.5 h-3.5" />
               Tous les collaborateurs
             </button>
           </div>
         )}
       </div>
 
+      {/* Tableau des mouvements */}
       <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
         {loading ? (
           <div className="flex justify-center items-center py-16">
@@ -107,58 +145,110 @@ export default function HistoriquePage() {
           </div>
         ) : mouvements.length === 0 ? (
           <div className="text-center py-16 text-slate-400">
-            <span className="text-4xl block mb-2">📜</span>
+            <History className="w-12 h-12 mx-auto mb-2 text-slate-300" />
             <p className="font-semibold text-slate-600">Aucun mouvement enregistré.</p>
-            <p className="text-sm mt-1">Les mouvements apparaîtront lors de la validation des congés ou ajustements.</p>
+            <p className="text-sm mt-1 text-slate-400">
+              Les mouvements apparaîtront lors de la validation des congés ou ajustements de soldes.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="table w-full">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
-                  <th>Date</th>
-                  <th>Collaborateur</th>
-                  <th>Type de Mouvement</th>
-                  <th>Type de Congé</th>
-                  <th>Quantité</th>
-                  <th>Commentaire</th>
-                  <th>Effectué par</th>
+                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-3">Date</th>
+                  <th className="py-3">Collaborateur</th>
+                  <th className="py-3">Type de Mouvement</th>
+                  <th className="py-3">Type de Congé</th>
+                  <th className="py-3">Quantité</th>
+                  <th className="py-3">Commentaire</th>
+                  <th className="py-3">Effectué par</th>
                 </tr>
               </thead>
               <tbody>
-                {mouvements.slice().reverse().map((m, idx) => (
-                  <tr key={m.id || idx} className="hover:bg-slate-50/60 border-b border-slate-100">
-                    <td className="text-xs text-slate-600 font-medium">
-                      {m.date ? new Date(m.date).toLocaleDateString("fr-FR") : "-"}
-                    </td>
-                    <td className="font-bold text-slate-800">
-                      {getUserName(m.utilisateurId)}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge badge-sm font-semibold ${
-                          m.typeMouvement === "DEBIT_CONGE"
-                            ? "badge-error text-white"
-                            : "badge-success text-white"
-                        }`}
-                      >
-                        {m.typeMouvement}
-                      </span>
-                    </td>
-                    <td className="font-medium text-slate-700">
-                      {getTypeLabel(m.type_conge_id)}
-                    </td>
-                    <td className="font-bold text-blue-600">
-                      {m.quantite} j
-                    </td>
-                    <td className="text-xs text-slate-500 max-w-xs truncate" title={m.commentaire}>
-                      {m.commentaire || "-"}
-                    </td>
-                    <td className="text-xs text-slate-600">
-                      {m.effectue_par ? getUserName(m.effectue_par) : "Système"}
-                    </td>
-                  </tr>
-                ))}
+                {mouvements.slice().reverse().map((m, idx) => {
+                  const isDebit = m.typeMouvement === "DEBIT_CONGE";
+
+                  return (
+                    <tr key={m.id || idx} className="hover:bg-slate-50/80 transition-colors border-b border-slate-100">
+                      {/* Date */}
+                      <td className="py-3.5 text-xs text-slate-600 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          {m.date ? new Date(m.date).toLocaleDateString("fr-FR") : "-"}
+                        </div>
+                      </td>
+
+                      {/* Collaborateur */}
+                      <td className="py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs border border-slate-200">
+                            <User className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="font-bold text-slate-800 text-sm">
+                            {getUserName(m.utilisateurId)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Type Mouvement */}
+                      <td className="py-3.5">
+                        {isDebit ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600" />
+                            DÉBIT
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
+                            CRÉDIT
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Type Congé */}
+                      <td className="py-3.5 font-semibold text-slate-700 text-sm">
+                        <div className="flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-slate-400" />
+                          {getTypeLabel(m.type_conge_id)}
+                        </div>
+                      </td>
+
+                      {/* Quantité */}
+                      <td className="py-3.5">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold ${
+                          isDebit 
+                            ? "bg-rose-50 text-rose-700 border border-rose-200" 
+                            : "bg-blue-50 text-blue-700 border border-blue-200"
+                        }`}>
+                          {isDebit ? `-${m.quantite}` : `+${m.quantite}`} j
+                        </span>
+                      </td>
+
+                      {/* Commentaire */}
+                      <td className="py-3.5 text-xs text-slate-500 max-w-xs">
+                        <div className="flex items-center gap-1 truncate" title={m.commentaire}>
+                          {m.commentaire ? (
+                            <>
+                              <MessageSquare className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{m.commentaire}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-300 italic">-</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Effectué par */}
+                      <td className="py-3.5 text-xs text-slate-600 font-medium">
+                        <div className="flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                          {m.effectue_par ? getUserName(m.effectue_par) : "Système"}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

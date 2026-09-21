@@ -1,65 +1,116 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { authFetch, getCurrentUser } from "@/lib/apiClient";
+import {
+  Users,
+  UserPlus,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  ShieldAlert,
+  BadgeCheck,
+  UserX,
+  Calendar,
+  Mail,
+  Lock,
+  ShieldCheck,
+  X,
+  User
+} from "lucide-react";
 
 export default function UtilisateursPage() {
+  const [currentUser] = useState(() => getCurrentUser());
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [newUser, setNewUser] = useState({
+    matricule: "",
     nom: "",
     prenom: "",
     email: "",
-    mot_de_pass: "123456",
+    mot_de_pass: "",
     role: "EMPLOYE",
     date_embauche: new Date().toISOString().split("T")[0],
     actif: true,
   });
   const [msg, setMsg] = useState({ type: "", text: "" });
 
-  const loadUsers = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("http://localhost:8080/utilisateur/all");
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error("Erreur chargement utilisateurs:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+
+    const loadUsers = async () => {
+      try {
+        setLoading(true);
+        const res = await authFetch("http://localhost:8080/utilisateur/all");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setUsers(Array.isArray(data) ? data : []);
+          }
+        } else {
+          const errorMsg = await res.text();
+          console.error("Erreur serveur:", errorMsg);
+        }
+      } catch (err) {
+        console.error("Erreur chargement utilisateurs:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
     loadUsers();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleCreate = async (e) => {
     e.preventDefault();
     setMsg({ type: "", text: "" });
     try {
-      const res = await fetch("http://localhost:8080/utilisateur/create", {
+      const payload = {
+        matricule: newUser.matricule.trim(),
+        nom: newUser.nom.trim(),
+        prenom: newUser.prenom.trim(),
+        email: newUser.email.trim(),
+        password: newUser.mot_de_pass ? newUser.mot_de_pass.trim() : null,
+        mot_de_pass: newUser.mot_de_pass ? newUser.mot_de_pass.trim() : null,
+        role: newUser.role,
+        date_embauche: newUser.date_embauche,
+        actif: true,
+      };
+
+      const res = await authFetch("http://localhost:8080/utilisateur/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify(payload),
       });
+
       if (res.ok) {
-        const created = await res.json();
-        setUsers((prev) => [...prev, created]);
+        const responseData = await res.json();
+        const createdUser = responseData.utilisateur || responseData;
+        const generatedPass = responseData.generatedPassword;
+
+        setUsers((prev) => [...prev, createdUser]);
         setShowModal(false);
         setNewUser({
+          matricule: "",
           nom: "",
           prenom: "",
           email: "",
-          mot_de_pass: "123456",
+          mot_de_pass: "",
           role: "EMPLOYE",
           date_embauche: new Date().toISOString().split("T")[0],
           actif: true,
         });
-        setMsg({ type: "success", text: "Collaborateur créé avec succès !" });
+
+        const successText = generatedPass
+          ? `Collaborateur créé avec succès ! Mot de passe généré : ${generatedPass}`
+          : "Collaborateur créé avec succès et soldes initialisés !";
+
+        setMsg({ type: "success", text: successText });
       } else {
         const txt = await res.text();
         setMsg({ type: "error", text: txt || "Erreur lors de la création." });
@@ -69,9 +120,26 @@ export default function UtilisateursPage() {
     }
   };
 
+  const isAdmin = currentUser?.role?.toUpperCase() === "ADMIN";
+
+  if (!loading && !isAdmin) {
+    return (
+      <div className="bg-amber-50 border-l-4 border-amber-500 rounded-2xl p-6 shadow-sm flex items-start gap-4">
+        <ShieldAlert className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <h3 className="text-base font-bold text-amber-900">Accès Restreint — SPAT</h3>
+          <p className="text-sm text-amber-700 mt-1">
+            Seuls les Administrateurs RH de la SPAT sont habilités à gérer l'annuaire et les comptes collaborateurs.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const filteredUsers = users.filter((u) => {
     const term = search.toLowerCase();
     return (
+      (u.matricule && u.matricule.toLowerCase().includes(term)) ||
       (u.nom && u.nom.toLowerCase().includes(term)) ||
       (u.prenom && u.prenom.toLowerCase().includes(term)) ||
       (u.email && u.email.toLowerCase().includes(term)) ||
@@ -79,23 +147,56 @@ export default function UtilisateursPage() {
     );
   });
 
+  const getRoleBadge = (role) => {
+    switch (role?.toUpperCase()) {
+      case "ADMIN":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            ADMINISTRATEUR
+          </span>
+        );
+      case "MANAGER":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            <BadgeCheck className="w-3.5 h-3.5" />
+            MANAGER
+          </span>
+        );
+      case "EMPLOYE":
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            <User className="w-3.5 h-3.5" />
+            EMPLOYÉ
+          </span>
+        );
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
+      {/* Banner Institutionnelle SPAT */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border-l-4 border-blue-600 flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
-            <span>👥</span> Gestion des Utilisateurs
+          <div className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-1">
+            SPAT — Société du Port à Gestion Autonome de Toamasina
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Users className="w-6 h-6 text-blue-400" />
+            Gestion des Collaborateurs & Accès
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Consultez et administrez les comptes collaborateurs, managers et administrateurs.
+          <p className="text-slate-400 text-sm mt-1">
+            {`Création de comptes, attribution des privilèges et consultation de l'annuaire du personnel.`}
           </p>
         </div>
 
         <button
           onClick={() => setShowModal(true)}
-          className="btn btn-primary btn-sm font-bold shadow"
+          className="btn btn-primary text-white font-semibold gap-2 shadow-xs"
         >
-          + Nouveau Collaborateur
+          <UserPlus className="w-4 h-4" />
+          Nouveau Collaborateur
         </button>
       </div>
 
@@ -103,23 +204,32 @@ export default function UtilisateursPage() {
         <div
           className={`alert ${
             msg.type === "success" ? "alert-success text-white" : "alert-error text-white"
-          } shadow-sm`}
+          } shadow-sm rounded-xl flex items-center gap-2`}
         >
+          {msg.type === "success" ? (
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 shrink-0" />
+          )}
           <span>{msg.text}</span>
         </div>
       )}
 
+      {/* Main Table Container */}
       <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
         <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-          <input
-            type="text"
-            placeholder="Rechercher par nom, email, rôle..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input input-bordered input-sm w-full max-w-xs text-slate-800"
-          />
-          <span className="text-xs text-slate-500 font-medium">
-            Total : {filteredUsers.length} collaborateur(s)
+          <div className="relative w-full max-w-xs">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Rechercher matricule, nom, rôle..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input input-bordered input-sm w-full pl-9 text-xs text-slate-800 bg-white focus:outline-hidden"
+            />
+          </div>
+          <span className="text-xs text-slate-500 font-medium bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+            Total : <strong className="text-slate-800">{filteredUsers.length}</strong> collaborateur(s)
           </span>
         </div>
 
@@ -129,52 +239,62 @@ export default function UtilisateursPage() {
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="text-center py-16 text-slate-400">
-            Aucun utilisateur trouvé.
+            <Users className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+            <p className="font-semibold text-slate-600">Aucun utilisateur trouvé.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="table w-full">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
-                  <th>ID</th>
-                  <th>Collaborateur</th>
-                  <th>Email</th>
-                  <th>Rôle</th>
-                  <th>Date d'embauche</th>
-                  <th>Statut</th>
+                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-3">Matricule</th>
+                  <th className="py-3">Collaborateur</th>
+                  <th className="py-3">Email</th>
+                  <th className="py-3">Rôle & Privilèges</th>
+                  <th className="py-3">{`Date d'embauche`}</th>
+                  <th className="py-3">Statut</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50/60 border-b border-slate-100">
-                    <td className="font-mono text-xs text-slate-400">#{u.id}</td>
-                    <td className="font-bold text-slate-800">
-                      {u.prenom} {u.nom}
-                    </td>
-                    <td className="text-sm text-slate-600 font-medium">{u.email}</td>
-                    <td>
-                      <span
-                        className={`badge badge-sm font-bold ${
-                          u.role === "ADMIN"
-                            ? "badge-primary text-white"
-                            : u.role === "MANAGER"
-                            ? "badge-secondary text-white"
-                            : "badge-ghost text-slate-700"
-                        }`}
-                      >
-                        {u.role || "EMPLOYE"}
+                  <tr key={u.id} className="hover:bg-slate-50/80 transition-colors border-b border-slate-100">
+                    <td className="py-3.5">
+                      <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">
+                        {u.matricule || `-`}
                       </span>
                     </td>
-                    <td className="text-xs text-slate-600">
-                      {u.date_embauche || "-"}
+                    <td className="py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs border border-slate-200">
+                          {u.prenom ? u.prenom[0].toUpperCase() : "U"}
+                        </div>
+                        <span className="font-bold text-slate-800 text-sm">
+                          {u.prenom} {u.nom}
+                        </span>
+                      </div>
                     </td>
-                    <td>
+                    <td className="py-3.5 text-xs text-slate-600 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        {u.email}
+                      </div>
+                    </td>
+                    <td className="py-3.5">{getRoleBadge(u.role)}</td>
+                    <td className="py-3.5 text-xs text-slate-600">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        {u.date_embauche || "-"}
+                      </div>
+                    </td>
+                    <td className="py-3.5">
                       {u.actif !== false ? (
-                        <span className="badge badge-success badge-xs text-white">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3" />
                           Actif
                         </span>
                       ) : (
-                        <span className="badge badge-error badge-xs text-white">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <UserX className="w-3 h-3" />
                           Inactif
                         </span>
                       )}
@@ -189,13 +309,36 @@ export default function UtilisateursPage() {
 
       {/* Modal d'ajout utilisateur */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span>➕</span> Ajouter un collaborateur
-            </h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 text-slate-800 border border-slate-100">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-blue-600" />
+                Ajouter un Collaborateur SPAT
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleCreate} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Matricule
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: MTR-001"
+                  value={newUser.matricule}
+                  onChange={(e) => setNewUser({ ...newUser, matricule: e.target.value })}
+                  className="input input-bordered input-sm w-full bg-white text-slate-800 focus:outline-hidden"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
@@ -206,7 +349,7 @@ export default function UtilisateursPage() {
                     required
                     value={newUser.nom}
                     onChange={(e) => setNewUser({ ...newUser, nom: e.target.value })}
-                    className="input input-bordered input-sm w-full"
+                    className="input input-bordered input-sm w-full bg-white text-slate-800 focus:outline-hidden"
                   />
                 </div>
                 <div>
@@ -218,35 +361,36 @@ export default function UtilisateursPage() {
                     required
                     value={newUser.prenom}
                     onChange={(e) => setNewUser({ ...newUser, prenom: e.target.value })}
-                    className="input input-bordered input-sm w-full"
+                    className="input input-bordered input-sm w-full bg-white text-slate-800 focus:outline-hidden"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Email
+                  Email Institutionnel
                 </label>
                 <input
                   type="email"
                   required
+                  placeholder="agent@port-toamasina.mg"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="input input-bordered input-sm w-full"
+                  className="input input-bordered input-sm w-full bg-white text-slate-800 focus:outline-hidden"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                    Mot de passe
+                    Mot de passe (optionnel)
                   </label>
                   <input
                     type="password"
-                    required
+                    placeholder="Laisser vide pour auto"
                     value={newUser.mot_de_pass}
                     onChange={(e) => setNewUser({ ...newUser, mot_de_pass: e.target.value })}
-                    className="input input-bordered input-sm w-full"
+                    className="input input-bordered input-sm w-full bg-white text-slate-800 focus:outline-hidden"
                   />
                 </div>
 
@@ -257,7 +401,7 @@ export default function UtilisateursPage() {
                   <select
                     value={newUser.role}
                     onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                    className="select select-bordered select-sm w-full"
+                    className="select select-bordered select-sm w-full bg-white text-slate-800 focus:outline-hidden"
                   >
                     <option value="EMPLOYE">Employé</option>
                     <option value="MANAGER">Manager</option>
@@ -268,25 +412,25 @@ export default function UtilisateursPage() {
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                  Date d'embauche
+                  {`Date d'embauche`}
                 </label>
                 <input
                   type="date"
                   value={newUser.date_embauche}
                   onChange={(e) => setNewUser({ ...newUser, date_embauche: e.target.value })}
-                  className="input input-bordered input-sm w-full"
+                  className="input input-bordered input-sm w-full bg-white text-slate-800 focus:outline-hidden"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm font-semibold"
                 >
                   Annuler
                 </button>
-                <button type="submit" className="btn btn-primary btn-sm">
+                <button type="submit" className="btn btn-primary btn-sm text-white font-semibold">
                   Créer le compte
                 </button>
               </div>
