@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# je le fait dans .github/modernize/assessment/.gitignore
+Private.env
+src/main/resources/application-local.properties
+
