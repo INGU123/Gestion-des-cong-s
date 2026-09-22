@@ -1,179 +1,200 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   getNotificationNonLues,
   getToutesLesNotifications,
   marquerNotificationLue,
 } from "../../api/notificationConge/notificationConge";
-
 import { getCurrentUser } from "@/lib/apiClient";
 import {
   Bell,
-  BellOff,
+  Check,
   CheckCircle2,
   XCircle,
   Info,
-  Check,
-  Calendar,
+  X,
   Filter
 } from "lucide-react";
 
-export default function NotificationsPage() {
+export default function NotificationHeaderMenu() {
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filterNonLues, setFilterNonLues] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [filterNonLues, setFilterNonLues] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // State pour la notification Toast éphémère
+  const [activeToast, setActiveToast] = useState(null);
 
+  // 1. Charger l'utilisateur au montage
   useEffect(() => {
-    const u = getCurrentUser();
-    if (u) {
-      setUser(u);
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      setUser(currentUser);
     }
   }, []);
 
-  const loadNotifications = async () => {
+  // 2. Fonction de chargement stabilisée avec useCallback
+  const loadNotifications = useCallback(async () => {
     if (!user?.id) return;
     try {
       setLoading(true);
       const data = filterNonLues
         ? await getNotificationNonLues(user.id)
         : await getToutesLesNotifications(user.id);
-      setNotifications(Array.isArray(data) ? data : []);
+      
+      const notifsList = Array.isArray(data) ? data : [];
+      setNotifications(notifsList);
+
+      // Afficher un Toast s'il y a une notification non lue récente
+      const derniereNonLue = notifsList.find((n) => !n.lue);
+      if (derniereNonLue) {
+        setActiveToast(derniereNonLue);
+      }
     } catch (err) {
       console.error("Erreur chargement notifications:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, filterNonLues]);
 
+  // 3. Charger les notifications dès que 'user' ou 'filterNonLues' change
   useEffect(() => {
     if (user?.id) {
       loadNotifications();
     }
-  }, [user, filterNonLues]);
+  }, [user?.id, filterNonLues, loadNotifications]);
 
-  const handleMarquerLue = async (notifId) => {
+  // Auto-fermeture du Toast après 5 secondes
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => setActiveToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
+
+  const handleMarquerLue = async (notifId, e) => {
+    if (e) e.stopPropagation();
     try {
       await marquerNotificationLue(notifId);
       setNotifications((prev) =>
         prev.map((n) => (n.id === notifId ? { ...n, lue: true } : n))
       );
+      if (activeToast?.id === notifId) {
+        setActiveToast(null);
+      }
     } catch (err) {
       console.error("Erreur mise à jour notification:", err);
     }
   };
 
+  const nonLuesCount = notifications.filter((n) => !n.lue).length;
+
   const getNotificationIcon = (type) => {
     switch (type) {
       case "VALIDATION":
-        return <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />;
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />;
       case "REFUS":
-        return <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />;
+        return <XCircle className="w-4 h-4 text-rose-500 shrink-0" />;
       default:
-        return <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />;
+        return <Info className="w-4 h-4 text-blue-500 shrink-0" />;
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Banner Institutionnelle SPAT */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border-l-4 border-blue-600 flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-1">
-            SPAT — Société du Port à Gestion Autonome de Toamasina
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Bell className="w-6 h-6 text-blue-400" />
-            Centre de Notifications
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {`Suivez en direct l'état d'avancement de vos demandes et des alertes de votre compte.`}
-          </p>
-        </div>
-
-        {/* Filtrage par état de lecture */}
-        <div className="inline-flex p-1 bg-slate-800 rounded-xl border border-slate-700">
-          <button
-            onClick={() => setFilterNonLues(false)}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              !filterNonLues
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-300 hover:text-white"
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            Toutes
-          </button>
-          <button
-            onClick={() => setFilterNonLues(true)}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              filterNonLues
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-300 hover:text-white"
-            }`}
-          >
-            <Bell className="w-3.5 h-3.5" />
-            Non lues uniquement
-          </button>
-        </div>
-      </div>
-
-      {/* Liste des Notifications */}
-      <div className="space-y-3">
-        {loading ? (
-          <div className="flex justify-center items-center py-16">
-            <span className="loading loading-spinner loading-lg text-primary"></span>
-          </div>
-        ) : notifications.length === 0 ? (
-          <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
-            <BellOff className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-            <p className="font-semibold text-slate-600 text-base">Aucune notification pour le moment.</p>
-            <p className="text-sm mt-1 text-slate-400">
-             {` Vous serez notifié dès qu'une demande de congé est soumise, validée ou refusée.`}
-            </p>
-          </div>
-        ) : (
-          notifications.slice().reverse().map((n) => (
-            <div
-              key={n.id}
-              className={`p-4 rounded-xl border transition-all flex items-start justify-between gap-4 ${
-                n.lue
-                  ? "bg-white border-slate-200 text-slate-700"
-                  : "bg-blue-50/60 border-blue-200 text-slate-900 shadow-xs"
-              }`}
-            >
-              <div className="flex gap-3.5 items-start">
-                {getNotificationIcon(n.type)}
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-sm leading-snug">{n.contenu}</p>
-                    {!n.lue && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white uppercase tracking-wider">
-                        Nouveau
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {n.date_envoi ? new Date(n.date_envoi).toLocaleDateString("fr-FR") : "Aujourd'hui"}
-                  </span>
-                </div>
-              </div>
-
-              {!n.lue && (
-                <button
-                  onClick={() => handleMarquerLue(n.id)}
-                  className="btn btn-ghost btn-xs text-blue-600 hover:bg-blue-100 hover:text-blue-700 shrink-0 gap-1"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  Marquer comme lue
-                </button>
-              )}
-            </div>
-          ))
+    <div className="relative">
+      {/* BOUTON CLOCHE DANS LE HEADER */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-all focus:outline-none"
+        aria-label="Notifications"
+      >
+        <Bell className="w-5 h-5" />
+        {nonLuesCount > 0 && (
+          <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-slate-900">
+            {nonLuesCount > 9 ? "9+" : nonLuesCount}
+          </span>
         )}
-      </div>
+      </button>
+
+      {/* DROPDOWN MENU */}
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden text-slate-800">
+          <div className="p-3 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-blue-400" />
+              <span className="font-semibold text-sm">Notifications</span>
+            </div>
+            
+            {/* Filtres Rapides */}
+            <button
+              onClick={() => setFilterNonLues(!filterNonLues)}
+              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg"
+            >
+              <Filter className="w-3 h-3" />
+              {filterNonLues ? "Toutes" : "Non lues"}
+            </button>
+          </div>
+
+          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+            {loading ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                Chargement...
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                Aucune notification.
+              </div>
+            ) : (
+              notifications.slice(0, 5).map((n) => (
+                <div
+                  key={n.id}
+                  className={`p-3 text-xs flex items-start gap-3 transition-colors ${
+                    n.lue ? "bg-white" : "bg-blue-50/50"
+                  }`}
+                >
+                  {getNotificationIcon(n.type)}
+                  <div className="flex-1">
+                    <p className={`leading-snug ${!n.lue ? "font-semibold text-slate-900" : "text-slate-600"}`}>
+                      {n.contenu}
+                    </p>
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      {n.date_envoi ? new Date(n.date_envoi).toLocaleDateString("fr-FR") : "Aujourd'hui"}
+                    </span>
+                  </div>
+                  {!n.lue && (
+                    <button
+                      onClick={(e) => handleMarquerLue(n.id, e)}
+                      className="p-1 text-blue-600 hover:bg-blue-100 rounded-md shrink-0"
+                      title="Marquer comme lue"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TOAST TEMPORAIRE FLOATTANT EN HAUT À DROITE */}
+      {activeToast && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm w-full bg-slate-900 text-white rounded-xl shadow-2xl p-4 border border-slate-700 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+          {getNotificationIcon(activeToast.type)}
+          <div className="flex-1 text-xs">
+            <p className="font-semibold text-slate-200">Nouvelle notification</p>
+            <p className="text-slate-300 mt-0.5">{activeToast.contenu}</p>
+          </div>
+          <button
+            onClick={() => setActiveToast(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-lg"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
