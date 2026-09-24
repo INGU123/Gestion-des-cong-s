@@ -33,6 +33,6 @@ build/
 .vscode/
 
 # je le fait dans .github/modernize/assessment/.gitignore
-Private.env
+.env
 src/main/resources/application-local.properties
 

@@ -4,13 +4,18 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import com.fruvio.GestionConge.solde_conge.entity.Solde_conge;
 
+@Repository
 public interface Solde_congeRepository extends JpaRepository<Solde_conge, Long> {
 
     // Récupérer tous les soldes d’un utilisateur
     List<Solde_conge> findByUtilisateurId(Long utilisateurId);
+
+    // Récupérer tous les soldes d'une liste d'utilisateurs
+    List<Solde_conge> findByUtilisateurIdIn(List<Long> utilisateurIds);
 
     // Récupérer tous les soldes d’un utilisateur pour un type de congé
     List<Solde_conge> findByUtilisateurIdAndTypeCongeId(Long utilisateurId, Long typeCongeId);

@@ -1,6 +1,6 @@
 package com.fruvio.GestionConge.utilisateur.config;
 
-import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,108 +40,58 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
 
             .authorizeHttpRequests(auth -> auth
-
                 // Requêtes préflight CORS et authentification publique
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/utilisateur/login").permitAll()
-                .requestMatchers("/utilisateur/forgot-password").permitAll()
+                .requestMatchers(HttpMethod.POST, "/utilisateur/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/utilisateur/forgot-password").permitAll()
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/error").permitAll()
 
-                // Types de congés
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/type-conge/**"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                // Endpoints réservés à l'ADMIN
+                .requestMatchers(HttpMethod.POST, "/utilisateur/create").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/solde/initialiser/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/solde/ajuster/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/type-conge/create").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/type-conge/update/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/type-conge/delete/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/services/create").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/services/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/services/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/historiques/creer").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/notification/creer").hasRole("ADMIN")
 
-                .requestMatchers(
-                    "/type-conge/**"
-                ).hasRole("ADMIN")
+                // Endpoints réservés à ADMIN et MANAGER
+                .requestMatchers("/utilisateur/all").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.PUT, "/conge/*/traiter").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/conge/manager/**").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/conge/en-attente").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/conge/all").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/solde", "/solde/all").hasAnyRole("ADMIN", "MANAGER")
+                .requestMatchers(HttpMethod.GET, "/historiques", "/historiques/all").hasAnyRole("ADMIN", "MANAGER")
 
-                // Gestion des utilisateurs
-                .requestMatchers(
-                    HttpMethod.POST,
-                    "/utilisateur/create"
-                ).hasRole("ADMIN")
-
-                .requestMatchers(
-                    HttpMethod.PUT,
-                    "/utilisateur/update"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
-
-                .requestMatchers(
-                    "/utilisateur/all"
-                ).hasAnyRole("ADMIN", "MANAGER")
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/utilisateur/{id}"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
-
-                // Soldes
-                .requestMatchers(
-                    HttpMethod.POST,
-                    "/solde/initialiser/**"
-                ).hasRole("ADMIN")
-
-                .requestMatchers(
-                    HttpMethod.PUT,
-                    "/solde/ajuster/**"
-                ).hasRole("ADMIN")
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/solde/**"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
-
-                // Demandes de congé
-                .requestMatchers(
-                    HttpMethod.PUT,
-                    "/conge/*/traiter"
-                ).hasAnyRole("ADMIN", "MANAGER")
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/conge/manager/**"
-                ).hasAnyRole("ADMIN", "MANAGER")
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/conge/en-attente"
-                ).hasAnyRole("ADMIN", "MANAGER")
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/conge/all"
-                ).hasAnyRole("ADMIN", "MANAGER")
-
-                .requestMatchers(
-                    "/conge/**"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
-
-                // Notifications et historique
-                .requestMatchers(
-                    "/notification/**"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
-
-                .requestMatchers(
-                    "/historiques/**"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
-
-                .requestMatchers(
-                    "/services/**"
-                ).hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                // Endpoints accessibles aux utilisateurs connectés (avec vérifications de propriété/périmètre)
+                .requestMatchers(HttpMethod.GET, "/utilisateur/{id}").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.PUT, "/utilisateur/update").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.PUT, "/utilisateur/change-password").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.POST, "/conge/demander/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.PUT, "/conge/*/annuler").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.GET, "/conge/mes-demandes/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.GET, "/solde/utilisateur/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.GET, "/type-conge/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.GET, "/services/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers("/notification/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
+                .requestMatchers(HttpMethod.GET, "/historiques/utilisateur/**").hasAnyRole("ADMIN", "MANAGER", "EMPLOYE")
 
                 // Toute autre requête nécessite une authentification
                 .anyRequest().authenticated()
             )
 
-            // Application sans session serveur
+            // Architecture stateless sans session serveur
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
 
-            // Filtre JWT exécuté avant le filtre d'authentification standard
+            // Filtre JWT placé avant le filtre standard d'authentification
             .addFilterBefore(
                 jwtAuthFilter,
                 UsernamePasswordAuthenticationFilter.class
@@ -155,12 +105,9 @@ public class SecurityConfig {
             CustomUserDetailsService userDetailsService,
             PasswordEncoder passwordEncoder) {
 
-        DaoAuthenticationProvider provider =
-                new DaoAuthenticationProvider();
-
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
-
         return provider;
     }
 
@@ -174,20 +121,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration configuration =
-                new CorsConfiguration();
+        CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(null);
-
-        configuration.setAllowedOriginPatterns(
-            Arrays.asList(
+        configuration.setAllowedOrigins(
+            List.of(
                 "http://localhost:3000",
                 "http://127.0.0.1:3000"
             )
         );
 
         configuration.setAllowedMethods(
-            Arrays.asList(
+            List.of(
                 "GET",
                 "POST",
                 "PUT",
@@ -198,25 +142,29 @@ public class SecurityConfig {
         );
 
         configuration.setAllowedHeaders(
-            Arrays.asList("*")
+            List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With"
+            )
+        );
+
+        configuration.setExposedHeaders(
+            List.of("Authorization")
         );
 
         configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
-        source.registerCorsConfiguration(
-            "/**",
-            configuration
-        );
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-
         return new BCryptPasswordEncoder();
     }
 }

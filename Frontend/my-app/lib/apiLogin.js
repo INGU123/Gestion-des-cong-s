@@ -1,22 +1,30 @@
 const API_URL = "http://localhost:8080/utilisateur";
 
-export const loginUser = async (email, motDePass) => {
+export const loginUser = async (identifier, motDePass) => {
+  const idTrimmed = identifier ? identifier.trim() : "";
   const response = await fetch(`${API_URL}/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      email: email ? email.trim() : "",
+      matricule: idTrimmed,
+      email: idTrimmed,
       password: motDePass,
       mot_de_pass: motDePass,
-      motDePass: motDePass,
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || "Identifiants invalides");
+    let parsedMessage = errorText;
+    try {
+      const jsonErr = JSON.parse(errorText);
+      if (jsonErr && jsonErr.message) {
+        parsedMessage = jsonErr.message;
+      }
+    } catch (_) {}
+    throw new Error(parsedMessage || "Matricule ou mot de passe incorrect.");
   }
 
   return await response.json(); // Retourne { token, utilisateur }

@@ -1,19 +1,33 @@
 package com.fruvio.GestionConge.utilisateur.controller;
 
-import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.mail.MailException;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
+import com.fruvio.GestionConge.utilisateur.config.CustomUserDetails;
 import com.fruvio.GestionConge.utilisateur.config.JwtUtil;
+import com.fruvio.GestionConge.utilisateur.dto.ChangePasswordRequest;
+import com.fruvio.GestionConge.utilisateur.dto.ForgotPasswordRequest;
+import com.fruvio.GestionConge.utilisateur.dto.LoginRequest;
+import com.fruvio.GestionConge.utilisateur.dto.LoginResponse;
+import com.fruvio.GestionConge.utilisateur.dto.UtilisateurCreateRequest;
+import com.fruvio.GestionConge.utilisateur.dto.UtilisateurResponse;
+import com.fruvio.GestionConge.utilisateur.dto.UtilisateurUpdateRequest;
 import com.fruvio.GestionConge.utilisateur.entity.Role;
 import com.fruvio.GestionConge.utilisateur.entity.Utilisateur;
-import com.fruvio.GestionConge.utilisateur.service.EmailService;
 import com.fruvio.GestionConge.utilisateur.service.UtilisateurService;
 
 import jakarta.validation.Valid;
@@ -23,48 +37,60 @@ import jakarta.validation.Valid;
 public class UtilisateurController {
 
     private final UtilisateurService utilisateurService;
-    private final EmailService emailService;
     private final JwtUtil jwtUtil;
 
-    public UtilisateurController(UtilisateurService utilisateurService, EmailService emailService, JwtUtil jwtUtil) {
+    public UtilisateurController(UtilisateurService utilisateurService, JwtUtil jwtUtil) {
         this.utilisateurService = utilisateurService;
-        this.emailService = emailService;
         this.jwtUtil = jwtUtil;
     }
 
+    // =========================================================
+    // LOGIN (Matricule + Mot de passe + JWT)
+    // =========================================================
+
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
-        String matricule = credentials.getOrDefault("matricule", credentials.get("email"));
-        String motDePass = credentials.getOrDefault("password",
-                credentials.getOrDefault("mot_de_pass", credentials.get("motDePass")));
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        String identifier = request.getIdentifier();
+        String password = request.getPassword();
 
-        try {
-            Utilisateur utilisateur = utilisateurService.login(matricule, motDePass);
-
-            if (utilisateur != null) {
-                String roleName = (utilisateur.getRole() != null) ? utilisateur.getRole().name() : "EMPLOYE";
-                String token = jwtUtil.generateToken(utilisateur.getMatricule(), roleName);
-                return ResponseEntity.ok(Map.of(
-                    "token", token,
-                    "utilisateur", utilisateur
-                ));
-            } else {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Matricule ou mot de passe incorrect");
-            }
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Matricule ou mot de passe incorrect");
+        if (identifier == null || identifier.isBlank() || password == null || password.isBlank()) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body("Le matricule et le mot de passe sont obligatoires.");
         }
+
+        Utilisateur utilisateur = utilisateurService.login(identifier, password);
+        if (utilisateur == null) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body("Matricule ou mot de passe incorrect.");
+        }
+
+        String roleName = utilisateur.getRole() != null ? utilisateur.getRole().name() : Role.EMPLOYE.name();
+        String token = jwtUtil.generateToken(utilisateur.getMatricule(), roleName);
+
+        UtilisateurResponse userResponse = UtilisateurResponse.fromEntity(utilisateur);
+
+        LoginResponse loginResponse = LoginResponse.builder()
+                .token(token)
+                .utilisateur(userResponse)
+                .build();
+
+        return ResponseEntity.ok(loginResponse);
     }
+
+    // =========================================================
+    // MOT DE PASSE OUBLIE
+    // =========================================================
 
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(
-            @RequestBody(required = false) Map<String, String> body,
+            @RequestBody(required = false) ForgotPasswordRequest body,
             @RequestParam(value = "email", required = false) String paramEmail) {
 
         String email = null;
-
-        if (body != null && body.containsKey("email")) {
-            email = body.get("email");
+        if (body != null && body.getEmail() != null) {
+            email = body.getEmail();
         } else if (paramEmail != null) {
             email = paramEmail;
         }
@@ -73,120 +99,111 @@ public class UtilisateurController {
             return ResponseEntity.badRequest().body("L'adresse e-mail est obligatoire.");
         }
 
-        try {
-            Utilisateur utilisateur = utilisateurService.findByEmail(email.trim());
+        utilisateurService.forgotPassword(email.trim());
 
-            if (utilisateur == null) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body("Aucun compte n'est associé à cet e-mail.");
-            }
-
-            String token = UUID.randomUUID().toString();
-            utilisateurService.saveResetToken(utilisateur, token);
-
-            emailService.sendResetPasswordEmail(utilisateur.getEmail(), token);
-
-            return ResponseEntity.ok("Lien de réinitialisation envoyé avec succès.");
-
-        } catch (MailException e) {
-            System.err.println("Erreur d'envoi SMTP : " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Erreur lors de l'envoi de l'e-mail. Vérifiez la configuration SMTP du serveur.");
-        } catch (Exception e) {
-            System.err.println("Erreur interne lors du forgot-password : " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Une erreur interne est survenue sur le serveur.");
-        }
+        // Réponse générique constante pour prévenir l'énumération des utilisateurs
+        return ResponseEntity.ok("Si un compte correspond à cette adresse, un lien de réinitialisation sera envoyé.");
     }
+
+    // =========================================================
+    // CREATION D'UN COLLABORATEUR (ADMIN uniquement)
+    // =========================================================
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create")
-    public ResponseEntity<?> create(@Valid @RequestBody Utilisateur utilisateur) {
-        Utilisateur saved = utilisateurService.createUtilisateur(utilisateur);
-        
-        // Retourne à la fois l'utilisateur créé et le mot de passe généré en clair
-        return new ResponseEntity<>(Map.of(
-            "utilisateur", saved,
-            "generatedPassword", saved.getPassword(),
-            "message", "Utilisateur créé avec succès. Un e-mail contenant les identifiants lui a été envoyé."
-        ), HttpStatus.CREATED);
+    public ResponseEntity<?> create(@Valid @RequestBody UtilisateurCreateRequest request) {
+        Utilisateur currentUser = getCurrentAuthenticatedUser();
+        Utilisateur saved = utilisateurService.createUtilisateur(request, currentUser);
+
+        UtilisateurResponse response = UtilisateurResponse.fromEntity(saved);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "utilisateur", response,
+                "message", "Collaborateur créé avec succès. Ses identifiants ont été envoyés par e-mail."
+        ));
     }
+
+    // =========================================================
+    // MISE A JOUR DU COMPTE
+    // =========================================================
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'EMPLOYE')")
     @PutMapping("/update")
-    public ResponseEntity<?> update(@RequestBody Map<String, Object> body) {
-        Long id = body.get("id") != null ? Long.valueOf(body.get("id").toString()) : null;
+    public ResponseEntity<?> update(@Valid @RequestBody UtilisateurUpdateRequest request) {
+        Utilisateur currentUser = getCurrentAuthenticatedUser();
+        Utilisateur updated = utilisateurService.updateUtilisateur(request, currentUser);
 
-        if (id == null) {
-            return ResponseEntity.badRequest().body("L'ID de l'utilisateur est obligatoire pour la mise à jour.");
-        }
-
-        Utilisateur u = utilisateurService.getUtilisateurById(id);
-        if (u == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
-        }
-
-        if (body.get("matricule") != null) u.setMatricule((String) body.get("matricule"));
-        if (body.get("nom") != null) u.setNom((String) body.get("nom"));
-        if (body.get("prenom") != null) u.setPrenom((String) body.get("prenom"));
-        if (body.get("email") != null) u.setEmail((String) body.get("email"));
-
-        String motDePass = (String) (body.get("password") != null ? body.get("password") : body.get("mot_de_pass"));
-        if (motDePass != null && !motDePass.trim().isEmpty()) {
-            u.setPassword(motDePass);
-        }
-
-        String roleStr = (String) body.get("role");
-        if (roleStr != null && !roleStr.isEmpty()) {
-            try {
-                u.setRole(Role.valueOf(roleStr.toUpperCase()));
-            } catch (Exception ignored) {}
-        }
-
-        Utilisateur updated = utilisateurService.updateUtilisateur(u);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(UtilisateurResponse.fromEntity(updated));
     }
+
+    // =========================================================
+    // CHANGEMENT DE MOT DE PASSE PAR L'UTILISATEUR
+    // =========================================================
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'EMPLOYE')")
+    @PutMapping("/change-password")
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        Utilisateur currentUser = getCurrentAuthenticatedUser();
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Authentification requise.");
+        }
+
+        utilisateurService.changePassword(currentUser.getId(), request, currentUser);
+        return ResponseEntity.ok("Mot de passe modifié avec succès.");
+    }
+
+    // =========================================================
+    // LISTE DES COLLABORATEURS (Filtrée selon rôle)
+    // =========================================================
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @GetMapping("/all")
-    public ResponseEntity<java.util.List<Utilisateur>> getAll() {
-        return ResponseEntity.ok(utilisateurService.getAllUtilisateurs());
+    public ResponseEntity<List<UtilisateurResponse>> getAll() {
+        Utilisateur currentUser = getCurrentAuthenticatedUser();
+        List<Utilisateur> list = utilisateurService.getAllUtilisateurs(currentUser);
+
+        List<UtilisateurResponse> responseList = list.stream()
+                .map(UtilisateurResponse::fromEntity)
+                .toList();
+
+        return ResponseEntity.ok(responseList);
     }
+
+    // =========================================================
+    // CONSULTATION D'UN COLLABORATEUR PAR ID
+    // =========================================================
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'EMPLOYE')")
     @GetMapping("/{id}")
-    public ResponseEntity<Utilisateur> getById(@PathVariable Long id) {
-        Utilisateur u = utilisateurService.getUtilisateurById(id);
-        if (u != null) {
-            return ResponseEntity.ok(u);
+    public ResponseEntity<?> getById(@PathVariable Long id) {
+        Utilisateur currentUser = getCurrentAuthenticatedUser();
+        Utilisateur user = utilisateurService.getUtilisateurById(id, currentUser);
+
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé.");
         }
-        return ResponseEntity.notFound().build();
+
+        return ResponseEntity.ok(UtilisateurResponse.fromEntity(user));
     }
 
-    @GetMapping("/utilisateurcontrol")
-    public String get(
-        @RequestParam String matricule,
-        @RequestParam String nom,
-        @RequestParam String prenom,
-        @RequestParam String email,
-        @RequestParam(required = false) String password,
-        @RequestParam String role,
-        @RequestParam Long service_id,
-        @RequestParam Long manager_id,
-        @RequestParam String date_embauche,
-        @RequestParam boolean actif,
-        @RequestParam String date_creation
-    ) {
-        LocalDate embauche = null;
-        LocalDate creation = null;
+    // =========================================================
+    // UTILITAIRES DE CONTEXTE DE SECURITE
+    // =========================================================
 
-        try { embauche = LocalDate.parse(date_embauche); } catch (Exception ignored) {}
-        try { creation = LocalDate.parse(date_creation); } catch (Exception ignored) {}
+    private Utilisateur getCurrentAuthenticatedUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return null;
+        }
 
-        return utilisateurService.creationUtilisateur(
-            matricule, nom, prenom, email, password, role,
-            service_id, manager_id, embauche, actif, creation
-        );
+        Object principal = auth.getPrincipal();
+        if (principal instanceof CustomUserDetails customUserDetails) {
+            return customUserDetails.getUtilisateur();
+        }
+        if (principal instanceof Utilisateur utilisateur) {
+            return utilisateur;
+        }
+
+        return null;
     }
 }

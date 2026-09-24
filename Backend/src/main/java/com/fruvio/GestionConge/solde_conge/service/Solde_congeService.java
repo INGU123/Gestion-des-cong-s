@@ -1,27 +1,57 @@
 package com.fruvio.GestionConge.solde_conge.service;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import com.fruvio.GestionConge.solde_conge.entity.Solde_conge;
 import com.fruvio.GestionConge.solde_conge.repository.Solde_congeRepository;
 import com.fruvio.GestionConge.type_conge.entity.Type_conge;
 import com.fruvio.GestionConge.type_conge.repository.Type_congeRepository;
+import com.fruvio.GestionConge.utilisateur.entity.Role;
+import com.fruvio.GestionConge.utilisateur.entity.Utilisateur;
+import com.fruvio.GestionConge.utilisateur.repository.UtilisateurRepository;
 
 @Service
 public class Solde_congeService {
 
     private final Solde_congeRepository soldeCongeRepository;
     private final Type_congeRepository typeCongeRepository;
+    private final UtilisateurRepository utilisateurRepository;
 
-    public Solde_congeService(Solde_congeRepository soldeCongeRepository, Type_congeRepository typeCongeRepository) {
+    public Solde_congeService(Solde_congeRepository soldeCongeRepository,
+                              Type_congeRepository typeCongeRepository,
+                              UtilisateurRepository utilisateurRepository) {
         this.soldeCongeRepository = soldeCongeRepository;
         this.typeCongeRepository = typeCongeRepository;
+        this.utilisateurRepository = utilisateurRepository;
     }
 
-    // Récupérer tous les soldes d’un utilisateur (avec auto-initialisation si vide)
-    public List<Solde_conge> getSoldesParUtilisateur(Long utilisateurId) {
+    // Récupérer tous les soldes d’un utilisateur avec contrôle d'autorisation
+    public List<Solde_conge> getSoldesParUtilisateur(Long utilisateurId, Utilisateur currentUser) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentification requise.");
+        }
+
+        if (currentUser.getRole() == Role.EMPLOYE && !Objects.equals(currentUser.getId(), utilisateurId)) {
+            throw new AccessDeniedException("Vous ne pouvez consulter que vos propres soldes.");
+        }
+
+        if (currentUser.getRole() == Role.MANAGER) {
+            if (!Objects.equals(currentUser.getId(), utilisateurId)) {
+                Utilisateur target = utilisateurRepository.findById(utilisateurId).orElse(null);
+                if (target == null || !Objects.equals(target.getManager_id(), currentUser.getId())) {
+                    throw new AccessDeniedException("Accès non autorisé : cet employé n'appartient pas à votre équipe.");
+                }
+            }
+        }
+
         List<Solde_conge> soldes = soldeCongeRepository.findByUtilisateurId(utilisateurId);
         if (soldes.isEmpty()) {
             int annee = java.time.LocalDate.now().getYear();
@@ -31,12 +61,32 @@ public class Solde_congeService {
         return soldes;
     }
 
-    // Récupérer tous les soldes
-    public List<Solde_conge> getAllSoldes() {
-        return soldeCongeRepository.findAll();
+    // Récupérer tous les soldes selon le rôle
+    public List<Solde_conge> getAllSoldes(Utilisateur currentUser) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentification requise.");
+        }
+
+        if (currentUser.getRole() == Role.ADMIN) {
+            return soldeCongeRepository.findAll();
+        }
+
+        if (currentUser.getRole() == Role.MANAGER) {
+            List<Utilisateur> subordinates = utilisateurRepository.findByManagerId(currentUser.getId());
+            List<Long> ids = new ArrayList<>(subordinates.stream().map(Utilisateur::getId).toList());
+            if (!ids.contains(currentUser.getId())) {
+                ids.add(currentUser.getId());
+            }
+            if (ids.isEmpty()) {
+                return Collections.emptyList();
+            }
+            return soldeCongeRepository.findByUtilisateurIdIn(ids);
+        }
+
+        throw new AccessDeniedException("Accès refusé : consultation globale réservée aux managers et administrateurs.");
     }
 
-    // Initialiser les soldes annuels pour un utilisateur
+    // Initialiser les soldes annuels pour un utilisateur (Admin)
     @Transactional
     public void initialiserSoldesPourUtilisateur(Long utilisateurId, int annee) {
         List<Type_conge> types = typeCongeRepository.findAll();
@@ -58,7 +108,7 @@ public class Solde_congeService {
         }
     }
 
-    // Ajuster manuellement le solde (réservé à l'Admin)
+    // Ajuster manuellement le solde (Strictement réservé à l'Admin)
     @Transactional
     public Solde_conge ajusterSolde(Long soldeId, int nouveauNombreJoursRestants) {
         Solde_conge solde = soldeCongeRepository.findById(soldeId)

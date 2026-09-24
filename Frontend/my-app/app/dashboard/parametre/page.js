@@ -5,12 +5,13 @@ import { getCurrentUser, authFetch } from "@/lib/apiClient";
 
 export default function Parametres() {
   const [userId, setUserId] = useState(null);
+  const [userRole, setUserRole] = useState("EMPLOYE");
   const [formData, setFormData] = useState({
     nom: "",
     prenom: "",
     email: "",
     mot_de_pass: "",
-    role: "",
+    role: "EMPLOYE",
     notification: true,
   });
   const [status, setStatus] = useState({ type: "", message: "" });
@@ -21,12 +22,14 @@ export default function Parametres() {
       const user = getCurrentUser();
       if (user) {
         setUserId(user.id);
+        const role = user.role || "EMPLOYE";
+        setUserRole(role);
         setFormData({
           nom: user.nom || "",
           prenom: user.prenom || "",
           email: user.email || "",
           mot_de_pass: "",
-          role: user.role || "EMPLOYE",
+          role: role,
           notification: true,
         });
       }
@@ -34,6 +37,8 @@ export default function Parametres() {
       console.error("Erreur lecture utilisateur:", e);
     }
   }, []);
+
+  const isAdmin = userRole?.toUpperCase() === "ADMIN";
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -54,9 +59,17 @@ export default function Parametres() {
         nom: formData.nom.trim(),
         prenom: formData.prenom.trim(),
         email: formData.email.trim(),
-        mot_de_pass: formData.mot_de_pass,
-        role: formData.role,
       };
+
+      if (formData.mot_de_pass && formData.mot_de_pass.trim().length > 0) {
+        payload.password = formData.mot_de_pass.trim();
+        payload.mot_de_pass = formData.mot_de_pass.trim();
+      }
+
+      // Seul l'administrateur a le droit d'envoyer une modification de rôle
+      if (isAdmin && formData.role) {
+        payload.role = formData.role;
+      }
 
       const res = await authFetch("http://localhost:8080/utilisateur/update", {
         method: "PUT",
@@ -70,15 +83,22 @@ export default function Parametres() {
         const merged = { ...existing, ...updatedUser };
         localStorage.setItem("user", JSON.stringify(merged));
 
+        setFormData((prev) => ({ ...prev, mot_de_pass: "" }));
+
         setStatus({
           type: "success",
           message: "Vos paramètres et informations de profil ont été enregistrés avec succès !",
         });
       } else {
         const errText = await res.text();
+        let message = errText;
+        try {
+          const parsed = JSON.parse(errText);
+          if (parsed && parsed.message) message = parsed.message;
+        } catch (_) {}
         setStatus({
           type: "error",
-          message: errText || "Erreur lors de la mise à jour des paramètres.",
+          message: message || "Erreur lors de la mise à jour des paramètres.",
         });
       }
     } catch (err) {
@@ -174,24 +194,33 @@ export default function Parametres() {
               placeholder="••••••••"
             />
             <span className="text-xs text-slate-400 mt-1 block">
-              Laissez inchangé si vous ne souhaitez pas modifier votre mot de passe.
+              Laissez vide pour conserver votre mot de passe actuel.
             </span>
           </div>
 
           <div>
             <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-              Rôle
+              Rôle {isAdmin ? "(Modifiable par Administrateur)" : "(Défini par l'administration)"}
             </label>
-            <select
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              className="select select-bordered w-full text-slate-800"
-            >
-              <option value="EMPLOYE">Employé</option>
-              <option value="MANAGER">Manager</option>
-              <option value="ADMIN">Administrateur</option>
-            </select>
+            {isAdmin ? (
+              <select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="select select-bordered w-full text-slate-800"
+              >
+                <option value="EMPLOYE">Employé</option>
+                <option value="MANAGER">Manager</option>
+                <option value="ADMIN">Administrateur</option>
+              </select>
+            ) : (
+              <input
+                type="text"
+                disabled
+                value={userRole}
+                className="input input-bordered w-full bg-slate-100 text-slate-600 cursor-not-allowed font-medium"
+              />
+            )}
           </div>
 
           <div className="form-control">
@@ -230,5 +259,3 @@ export default function Parametres() {
     </div>
   );
 }
-
-

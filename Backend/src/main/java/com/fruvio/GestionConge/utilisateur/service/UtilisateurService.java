@@ -2,20 +2,33 @@ package com.fruvio.GestionConge.utilisateur.service;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
-import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.fruvio.GestionConge.solde_conge.service.Solde_congeService;
+import com.fruvio.GestionConge.utilisateur.dto.ChangePasswordRequest;
+import com.fruvio.GestionConge.utilisateur.dto.UtilisateurCreateRequest;
+import com.fruvio.GestionConge.utilisateur.dto.UtilisateurUpdateRequest;
 import com.fruvio.GestionConge.utilisateur.entity.Role;
 import com.fruvio.GestionConge.utilisateur.entity.Utilisateur;
 import com.fruvio.GestionConge.utilisateur.repository.UtilisateurRepository;
 
 @Service
 public class UtilisateurService {
+
+    private static final Logger log = LoggerFactory.getLogger(UtilisateurService.class);
 
     private final UtilisateurRepository utilisateurRepository;
     private final PasswordEncoder passwordEncoder;
@@ -25,235 +38,436 @@ public class UtilisateurService {
     private static final String CHAR_LOWER = "abcdefghijklmnopqrstuvwxyz";
     private static final String CHAR_UPPER = CHAR_LOWER.toUpperCase();
     private static final String NUMBER = "0123456789";
-    private static final String PASSWORD_ALLOW_BASE = CHAR_LOWER + CHAR_UPPER + NUMBER;
+    private static final String SPECIAL = "!@#$%^&*";
+    private static final String PASSWORD_ALLOW_BASE = CHAR_LOWER + CHAR_UPPER + NUMBER + SPECIAL;
+
     private static final SecureRandom random = new SecureRandom();
 
-    public UtilisateurService(UtilisateurRepository utilisateurRepository,
-                              PasswordEncoder passwordEncoder,
-                              @Lazy Solde_congeService soldeCongeService,
-                              EmailService emailService) {
+    public UtilisateurService(
+            UtilisateurRepository utilisateurRepository,
+            PasswordEncoder passwordEncoder,
+            @Lazy Solde_congeService soldeCongeService,
+            EmailService emailService) {
+
         this.utilisateurRepository = utilisateurRepository;
         this.passwordEncoder = passwordEncoder;
         this.soldeCongeService = soldeCongeService;
         this.emailService = emailService;
     }
 
-    // --- Générateur de mot de passe automatique ---
+    // =========================================================
+    // GENERATION DE MOT DE PASSE TEMPORAIRE SECURISE
+    // =========================================================
+
     public String generateRandomPassword(int length) {
-        StringBuilder sb = new StringBuilder(length);
-        for (int i = 0; i < length; i++) {
-            int rndCharAt = random.nextInt(PASSWORD_ALLOW_BASE.length());
-            sb.append(PASSWORD_ALLOW_BASE.charAt(rndCharAt));
+        int pwdLength = Math.max(10, length);
+        StringBuilder sb = new StringBuilder(pwdLength);
+
+        // Garantir au moins un caractère de chaque type
+        sb.append(CHAR_LOWER.charAt(random.nextInt(CHAR_LOWER.length())));
+        sb.append(CHAR_UPPER.charAt(random.nextInt(CHAR_UPPER.length())));
+        sb.append(NUMBER.charAt(random.nextInt(NUMBER.length())));
+        sb.append(SPECIAL.charAt(random.nextInt(SPECIAL.length())));
+
+        for (int i = 4; i < pwdLength; i++) {
+            int index = random.nextInt(PASSWORD_ALLOW_BASE.length());
+            sb.append(PASSWORD_ALLOW_BASE.charAt(index));
         }
-        return sb.toString();
-    }
 
-    // --- Méthodes pour la réinitialisation de mot de passe ---
-
-    public Utilisateur findByEmail(String email) {
-        if (email == null) return null;
-        return utilisateurRepository.findByEmail(email.trim()).orElse(null);
-    }
-
-    public void saveResetToken(Utilisateur utilisateur, String token) {
-        if (utilisateur != null) {
-            utilisateur.setResetToken(token);
-            utilisateurRepository.save(utilisateur);
+        // Mélange
+        char[] chars = sb.toString().toCharArray();
+        for (int i = chars.length - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            char temp = chars[i];
+            chars[i] = chars[j];
+            chars[j] = temp;
         }
+
+        return new String(chars);
     }
 
-    public Utilisateur findByResetToken(String resetToken) {
-        if (resetToken == null) return null;
-        return utilisateurRepository.findByResetToken(resetToken).orElse(null);
+    // =========================================================
+    // AUTHENTIFICATION / LOGIN (BCrypt uniquement, compte actif)
+    // =========================================================
+
+    public Utilisateur login(String identifier, String rawPassword) {
+        if (identifier == null || identifier.trim().isEmpty()
+                || rawPassword == null || rawPassword.isEmpty()) {
+            return null;
+        }
+
+        String search = identifier.trim();
+
+        // Recherche prioritaire par matricule, puis par email
+        Optional<Utilisateur> userOpt = utilisateurRepository.findByMatricule(search);
+        if (userOpt.isEmpty()) {
+            userOpt = utilisateurRepository.findByEmail(search);
+        }
+
+        if (userOpt.isEmpty()) {
+            log.warn("Tentative de connexion échouée : identifiant inexistant");
+            return null;
+        }
+
+        Utilisateur user = userOpt.get();
+
+        // Règle 2.3 : Vérifier que le compte est actif
+        if (!user.isActif()) {
+            log.warn("Tentative de connexion rejetée : compte inactif [{}]", user.getMatricule());
+            return null;
+        }
+
+        // Règle 2.4 : Vérifier le mot de passe avec BCrypt uniquement
+        String storedHash = user.getPassword();
+        if (storedHash == null || (!storedHash.startsWith("$2a$")
+                && !storedHash.startsWith("$2b$")
+                && !storedHash.startsWith("$2y$"))) {
+
+            log.error("Compte avec mot de passe non haché BCrypt détecté pour [{}]. Connexion refusée.", user.getMatricule());
+            return null;
+        }
+
+        boolean matches = passwordEncoder.matches(rawPassword, storedHash);
+        if (!matches) {
+            log.warn("Mot de passe invalide pour [{}]", user.getMatricule());
+            return null;
+        }
+
+        return user;
     }
 
-    // --- Création simple avec mot de passe automatique ---
-    public Utilisateur createUtilisateur(Utilisateur utilisateur) {
-        if (utilisateur.getRole() == null) {
-            utilisateur.setRole(Role.EMPLOYE);
+    // =========================================================
+    // CREATION UTILISATEUR (Réservé ADMIN)
+    // =========================================================
+
+    @Transactional
+    public Utilisateur createUtilisateur(UtilisateurCreateRequest request, Utilisateur currentUser) {
+        if (request == null) {
+            throw new IllegalArgumentException("Données d'utilisateur obligatoires.");
+        }
+
+        String matricule = request.getMatricule() != null ? request.getMatricule().trim() : null;
+        String email = request.getEmail() != null ? request.getEmail().trim() : null;
+
+        if (matricule == null || matricule.isEmpty()) {
+            throw new IllegalArgumentException("Le matricule est obligatoire.");
+        }
+
+        if (email == null || email.isEmpty()) {
+            throw new IllegalArgumentException("L'adresse e-mail est obligatoire.");
+        }
+
+        if (utilisateurRepository.existsByMatricule(matricule)) {
+            throw new IllegalArgumentException("Le matricule " + matricule + " existe déjà.");
+        }
+
+        if (utilisateurRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("L'adresse e-mail " + email + " existe déjà.");
+        }
+
+        Role assignedRole = request.getRole() != null ? request.getRole() : Role.EMPLOYE;
+
+        // Seul un ADMIN peut attribuer un rôle
+        if (currentUser != null && currentUser.getRole() != Role.ADMIN) {
+            throw new AccessDeniedException("Seul un administrateur peut créer des utilisateurs.");
         }
 
         String rawPassword;
-        if (utilisateur.getPassword() != null && !utilisateur.getPassword().trim().isEmpty()) {
-            rawPassword = utilisateur.getPassword().trim();
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            rawPassword = request.getPassword().trim();
         } else {
-            // Génération automatique d'un mot de passe de 10 caractères
-            rawPassword = generateRandomPassword(10);
+            rawPassword = generateRandomPassword(12);
         }
 
-        utilisateur.setPassword(passwordEncoder.encode(rawPassword));
+        Utilisateur newUser = Utilisateur.builder()
+                .matricule(matricule)
+                .nom(request.getNom() != null ? request.getNom().trim() : "")
+                .prenom(request.getPrenom() != null ? request.getPrenom().trim() : "")
+                .email(email)
+                .password(passwordEncoder.encode(rawPassword))
+                .role(assignedRole)
+                .service_id(request.getService_id())
+                .manager_id(request.getManager_id())
+                .date_embauche(request.getDate_embauche() != null ? request.getDate_embauche() : LocalDate.now())
+                .date_creation(LocalDate.now())
+                .actif(request.getActif() != null ? request.getActif() : true)
+                .build();
 
-        if (utilisateur.getDate_creation() == null) {
-            utilisateur.setDate_creation(LocalDate.now());
-        }
-        utilisateur.setActif(true);
+        Utilisateur saved = utilisateurRepository.save(newUser);
 
-        Utilisateur saved = utilisateurRepository.save(utilisateur);
-
-        // Envoi de l'e-mail avec le mot de passe en clair (avant hashage)
-        if (saved.getEmail() != null && !saved.getEmail().isEmpty()) {
-            try {
-                emailService.sendWelcomeEmail(saved.getEmail(), saved.getMatricule(), rawPassword);
-            } catch (Exception e) {
-                System.err.println("Avertissement : échec de l'envoi du mail de bienvenue : " + e.getMessage());
-            }
-        }
-
+        // Initialisation cohérente des soldes
         try {
-            int annee = LocalDate.now().getYear();
-            soldeCongeService.initialiserSoldesPourUtilisateur(saved.getId(), annee);
+            int currentYear = LocalDate.now().getYear();
+            soldeCongeService.initialiserSoldesPourUtilisateur(saved.getId(), currentYear);
         } catch (Exception e) {
-            System.err.println("Avertissement : initialisation des soldes : " + e.getMessage());
+            log.error("Erreur lors de l'initialisation des soldes pour l'utilisateur #{}: {}", saved.getId(), e.getMessage());
         }
 
-        // On remet temporairement le mot de passe clair pour le retourner dans le contrôleur si besoin
-        saved.setPassword(rawPassword);
+        // Notification par e-mail des identifiants (mot de passe temporaire uniquement envoyé par e-mail)
+        try {
+            emailService.sendWelcomeEmail(saved.getEmail(), saved.getMatricule(), rawPassword);
+        } catch (Exception e) {
+            log.warn("Impossible d'envoyer le message de bienvenue avec les identifiants à {} : {}", saved.getEmail(), e.getMessage());
+        }
+
+        // Retourner l'entité enregistrée avec son hash BCrypt intact. Le mot de passe en clair n'est JAMAIS stocké dans l'entité.
         return saved;
     }
 
-    // --- Login avec support BCrypt et vérification par Matricule ---
-    public Utilisateur login(String matricule, String motDePass) {
-        if (matricule == null || motDePass == null) {
+    // =========================================================
+    // MISE A JOUR UTILISATEUR (Protection stricte des rôles & champs)
+    // =========================================================
+
+    @Transactional
+    public Utilisateur updateUtilisateur(UtilisateurUpdateRequest request, Utilisateur currentUser) {
+        if (request == null || request.getId() == null) {
+            throw new IllegalArgumentException("L'identifiant de l'utilisateur est obligatoire.");
+        }
+
+        Utilisateur targetUser = utilisateurRepository.findById(request.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Utilisateur non trouvé avec l'identifiant " + request.getId()));
+
+        if (currentUser == null) {
+            throw new AccessDeniedException("Opération non autorisée : utilisateur non authentifié.");
+        }
+
+        Role currentRole = currentUser.getRole();
+        boolean isSelf = Objects.equals(currentUser.getId(), targetUser.getId());
+        boolean isAdmin = currentRole == Role.ADMIN;
+        boolean isManager = currentRole == Role.MANAGER;
+
+        // Contrôle des autorisations d'accès à la modification
+        if (!isAdmin && !isSelf) {
+            throw new AccessDeniedException("Vous ne disposez pas des privilèges nécessaires pour modifier ce compte.");
+        }
+
+        // 1. Modification des informations personnelles autorisées (Tous rôles sur leur propre compte ou ADMIN)
+        if (request.getNom() != null && !request.getNom().trim().isEmpty()) {
+            targetUser.setNom(request.getNom().trim());
+        }
+
+        if (request.getPrenom() != null && !request.getPrenom().trim().isEmpty()) {
+            targetUser.setPrenom(request.getPrenom().trim());
+        }
+
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            String newEmail = request.getEmail().trim();
+            if (!newEmail.equalsIgnoreCase(targetUser.getEmail())) {
+                if (utilisateurRepository.existsByEmail(newEmail)) {
+                    throw new IllegalArgumentException("L'adresse e-mail " + newEmail + " est déjà utilisée.");
+                }
+                targetUser.setEmail(newEmail);
+            }
+        }
+
+        // 2. Modification du mot de passe
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            targetUser.setPassword(passwordEncoder.encode(request.getPassword().trim()));
+        }
+
+        // 3. Champs administratifs protégés : RÔLE, ACTIF, MATRICULE, SERVICE, MANAGER
+        if (request.getRole() != null && request.getRole() != targetUser.getRole()) {
+            if (!isAdmin) {
+                throw new AccessDeniedException("Seul un administrateur est autorisé à modifier le rôle.");
+            }
+            targetUser.setRole(request.getRole());
+        }
+
+        if (request.getActif() != null && request.getActif() != targetUser.isActif()) {
+            if (!isAdmin) {
+                throw new AccessDeniedException("Seul un administrateur est autorisé à activer ou désactiver un compte.");
+            }
+            targetUser.setActif(request.getActif());
+        }
+
+        if (request.getMatricule() != null && !request.getMatricule().trim().isEmpty()
+                && !request.getMatricule().trim().equals(targetUser.getMatricule())) {
+            if (!isAdmin) {
+                throw new AccessDeniedException("Seul un administrateur est autorisé à modifier le matricule.");
+            }
+            String newMatricule = request.getMatricule().trim();
+            if (utilisateurRepository.existsByMatricule(newMatricule)) {
+                throw new IllegalArgumentException("Le matricule " + newMatricule + " est déjà utilisé.");
+            }
+            targetUser.setMatricule(newMatricule);
+        }
+
+        if (request.getService_id() != null && !request.getService_id().equals(targetUser.getService_id())) {
+            if (!isAdmin) {
+                throw new AccessDeniedException("Seul un administrateur est autorisé à changer l'affectation du service.");
+            }
+            targetUser.setService_id(request.getService_id());
+        }
+
+        if (request.getManager_id() != null && !request.getManager_id().equals(targetUser.getManager_id())) {
+            if (!isAdmin) {
+                throw new AccessDeniedException("Seul un administrateur est autorisé à modifier le manager référent.");
+            }
+            targetUser.setManager_id(request.getManager_id());
+        }
+
+        return utilisateurRepository.save(targetUser);
+    }
+
+    // =========================================================
+    // CHANGEMENT DE MOT DE PASSE SECURISE
+    // =========================================================
+
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request, Utilisateur currentUser) {
+        if (userId == null || request == null) {
+            throw new IllegalArgumentException("Données de changement de mot de passe invalides.");
+        }
+
+        Utilisateur targetUser = utilisateurRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Utilisateur non trouvé."));
+
+        boolean isSelf = currentUser != null && Objects.equals(currentUser.getId(), targetUser.getId());
+        boolean isAdmin = currentUser != null && currentUser.getRole() == Role.ADMIN;
+
+        if (!isSelf && !isAdmin) {
+            throw new AccessDeniedException("Vous ne pouvez pas modifier le mot de passe de cet utilisateur.");
+        }
+
+        // Si l'utilisateur change son propre mot de passe, l'ancien est strictement exigé
+        if (isSelf) {
+            if (request.getAncienMotDePasse() == null || request.getAncienMotDePasse().isEmpty()) {
+                throw new IllegalArgumentException("L'ancien mot de passe est obligatoire.");
+            }
+            if (!passwordEncoder.matches(request.getAncienMotDePasse(), targetUser.getPassword())) {
+                throw new IllegalArgumentException("L'ancien mot de passe est incorrect.");
+            }
+        }
+
+        if (request.getNouveauMotDePasse() == null || request.getNouveauMotDePasse().length() < 6) {
+            throw new IllegalArgumentException("Le nouveau mot de passe doit comporter au moins 6 caractères.");
+        }
+
+        targetUser.setPassword(passwordEncoder.encode(request.getNouveauMotDePasse()));
+        utilisateurRepository.save(targetUser);
+    }
+
+    // =========================================================
+    // CONSULTATION PAR ID (Périmètre sécurisé)
+    // =========================================================
+
+    public Utilisateur getUtilisateurById(Long id, Utilisateur currentUser) {
+        if (id == null) {
             return null;
         }
-        Optional<Utilisateur> utilisateurOpt = utilisateurRepository.findByMatricule(matricule.trim());
-        if (utilisateurOpt.isPresent()) {
-            Utilisateur user = utilisateurOpt.get();
-            String storedPass = user.getPassword();
-            if (storedPass == null) {
-                return null;
-            }
 
-            boolean matches = false;
-            if (storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$") || storedPass.startsWith("$2y$")) {
-                matches = passwordEncoder.matches(motDePass, storedPass);
-            } else {
-                matches = storedPass.equals(motDePass);
-                if (matches) {
-                    user.setPassword(passwordEncoder.encode(motDePass));
-                    utilisateurRepository.save(user);
-                }
-            }
-
-            if (matches) {
-                return user;
-            }
-        }
-        return null;
-    }
-
-    // --- Création avec paramètres bruts incluant le matricule ---
-    public String creationUtilisateur(
-        String matricule,
-        String nom,
-        String prenom,
-        String email,
-        String password,
-        String roleStr,
-        Long service_id,
-        Long manager_id,
-        LocalDate date_embauche,
-        boolean actif,
-        LocalDate date_creation
-    ) {
-        Optional<Utilisateur> utilisateurExistant = utilisateurRepository.findByNomAndPrenom(nom, prenom);
-        if (utilisateurExistant.isEmpty()) {
-            Role role = Role.EMPLOYE;
-            try {
-                if (roleStr != null) {
-                    role = Role.valueOf(roleStr.toUpperCase());
-                }
-            } catch (Exception ignored) {}
-
-            String rawPassword = (password != null && !password.trim().isEmpty()) 
-                    ? password.trim() 
-                    : generateRandomPassword(10);
-
-            Utilisateur pers1 = Utilisateur.builder()
-                .matricule(matricule)
-                .nom(nom)
-                .prenom(prenom)
-                .email(email)
-                .password(passwordEncoder.encode(rawPassword))
-                .role(role)
-                .service_id(service_id)
-                .manager_id(manager_id)
-                .date_embauche(date_embauche != null ? date_embauche : LocalDate.now())
-                .actif(actif)
-                .date_creation(date_creation != null ? date_creation : LocalDate.now())
-                .build();
-
-            Utilisateur saved = utilisateurRepository.save(pers1);
-
-            if (email != null && !email.isEmpty()) {
-                try {
-                    emailService.sendWelcomeEmail(email, matricule, rawPassword);
-                } catch (Exception ignored) {}
-            }
-
-            try {
-                int annee = LocalDate.now().getYear();
-                soldeCongeService.initialiserSoldesPourUtilisateur(saved.getId(), annee);
-            } catch (Exception ignored) {}
-
-            return "Utilisateur créé avec succès. Mot de passe généré : " + rawPassword;
-        } else {
-            return "Utilisateur déjà répertorié...";
-        }
-    }
-
-    // --- Récupération ---
-    public List<Utilisateur> getAllUtilisateurs() {
-        return utilisateurRepository.findAll();
-    }
-
-    public Utilisateur getUtilisateurById(Long id) {
-        return utilisateurRepository.findById(id).orElse(null);
-    }
-
-    // --- Mise à jour ---
-    public Utilisateur updateUtilisateur(Utilisateur details) {
-        Utilisateur user = null;
-        if (details.getId() != null) {
-            user = utilisateurRepository.findById(details.getId()).orElse(null);
-        }
-        if (user == null && details.getMatricule() != null) {
-            user = utilisateurRepository.findByMatricule(details.getMatricule()).orElse(null);
-        }
-        if (user == null) {
+        Utilisateur target = utilisateurRepository.findById(id).orElse(null);
+        if (target == null) {
             return null;
         }
 
-        if (details.getMatricule() != null && !details.getMatricule().isEmpty()) {
-            user.setMatricule(details.getMatricule());
-        }
-        if (details.getNom() != null && !details.getNom().isEmpty()) {
-            user.setNom(details.getNom());
-        }
-        if (details.getPrenom() != null && !details.getPrenom().isEmpty()) {
-            user.setPrenom(details.getPrenom());
-        }
-        if (details.getEmail() != null && !details.getEmail().isEmpty()) {
-            user.setEmail(details.getEmail());
-        }
-        if (details.getPassword() != null && !details.getPassword().isEmpty()) {
-            String p = details.getPassword().trim();
-            if (!p.startsWith("$2a$") && !p.startsWith("$2b$") && !p.startsWith("$2y$")) {
-                user.setPassword(passwordEncoder.encode(p));
-            } else {
-                user.setPassword(p);
-            }
-        }
-        if (details.getRole() != null) {
-            user.setRole(details.getRole());
-        }
-        if (details.getService_id() != null) {
-            user.setService_id(details.getService_id());
-        }
-        if (details.getManager_id() != null) {
-            user.setManager_id(details.getManager_id());
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentification requise.");
         }
 
-        return utilisateurRepository.save(user);
+        if (currentUser.getRole() == Role.ADMIN) {
+            return target;
+        }
+
+        // Un employé ne peut voir que son profil
+        if (currentUser.getRole() == Role.EMPLOYE) {
+            if (!Objects.equals(currentUser.getId(), target.getId())) {
+                throw new AccessDeniedException("Accès non autorisé : vous ne pouvez consulter que votre propre profil.");
+            }
+            return target;
+        }
+
+        // Un manager peut voir son propre profil ou les membres de son équipe
+        if (currentUser.getRole() == Role.MANAGER) {
+            boolean isSelf = Objects.equals(currentUser.getId(), target.getId());
+            boolean isSubordinate = Objects.equals(currentUser.getId(), target.getManager_id());
+            if (!isSelf && !isSubordinate) {
+                throw new AccessDeniedException("Accès non autorisé : cet employé n'appartient pas à votre équipe.");
+            }
+            return target;
+        }
+
+        throw new AccessDeniedException("Accès non autorisé.");
+    }
+
+    // =========================================================
+    // LISTE DES UTILISATEURS (Filtrage selon périmètre)
+    // =========================================================
+
+    public List<Utilisateur> getAllUtilisateurs(Utilisateur currentUser) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentification requise.");
+        }
+
+        if (currentUser.getRole() == Role.ADMIN) {
+            return utilisateurRepository.findAll();
+        }
+
+        if (currentUser.getRole() == Role.MANAGER) {
+            List<Utilisateur> subordinates = new ArrayList<>(utilisateurRepository.findByManagerId(currentUser.getId()));
+            if (subordinates.stream().noneMatch(u -> Objects.equals(u.getId(), currentUser.getId()))) {
+                subordinates.add(currentUser);
+            }
+            return subordinates;
+        }
+
+        throw new AccessDeniedException("Accès refusé : la liste complète des collaborateurs est réservée à l'administration.");
+    }
+
+    // =========================================================
+    // MOT DE PASSE OUBLIE & REINITIALISATION (Anti-énumération & invalidation)
+    // =========================================================
+
+    @Transactional
+    public void forgotPassword(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            return;
+        }
+
+        Optional<Utilisateur> userOpt = utilisateurRepository.findByEmail(email.trim());
+        if (userOpt.isEmpty()) {
+            log.info("Demande de réinitialisation pour une adresse e-mail non enregistrée");
+            return;
+        }
+
+        Utilisateur user = userOpt.get();
+        if (!user.isActif()) {
+            log.warn("Demande de réinitialisation refusée : compte inactif [{}]", user.getEmail());
+            return;
+        }
+
+        String token = UUID.randomUUID().toString();
+        user.setResetToken(token);
+        user.setTokenExpiration(LocalDateTime.now().plusMinutes(30));
+        utilisateurRepository.save(user);
+
+        try {
+            emailService.sendResetPasswordEmail(user.getEmail(), token);
+        } catch (Exception e) {
+            log.error("Échec de l'envoi de l'e-mail de réinitialisation à {}: {}", user.getEmail(), e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        if (token == null || token.trim().isEmpty()) {
+            throw new IllegalArgumentException("Le jeton de réinitialisation est obligatoire.");
+        }
+
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new IllegalArgumentException("Le mot de passe doit comporter au moins 6 caractères.");
+        }
+
+        Utilisateur user = utilisateurRepository.findByResetToken(token.trim())
+                .orElseThrow(() -> new IllegalArgumentException("Jeton de réinitialisation invalide ou introuvable."));
+
+        if (user.getTokenExpiration() == null || user.getTokenExpiration().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Le jeton de réinitialisation a expiré.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setResetToken(null);
+        user.setTokenExpiration(null);
+        utilisateurRepository.save(user);
     }
 }

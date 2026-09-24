@@ -1,16 +1,23 @@
 package com.fruvio.GestionConge.service_conge.controller;
 
-import com.fruvio.GestionConge.service_conge.entity.Services;
-import com.fruvio.GestionConge.service_conge.repository.Service_congeRepository;
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.fruvio.GestionConge.service_conge.entity.Services;
+import com.fruvio.GestionConge.service_conge.repository.Service_congeRepository;
 
 @RestController
 @RequestMapping("/services")
-@CrossOrigin(origins = {"http://localhost:3000", "http://127.0.0.1:3000"}, allowCredentials = "true")
 public class Service_congeController {
 
     private final Service_congeRepository serviceRepository;
@@ -35,14 +42,14 @@ public class Service_congeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Créer un nouveau service (Admin)
+    // Créer un nouveau service (Strictement ADMIN)
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create")
     public Services createService(@RequestBody Services service) {
         return serviceRepository.save(service);
     }
 
-    // Mettre à jour un service existant (Admin)
+    // Mettre à jour un service existant (Strictement ADMIN)
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<Services> updateService(@PathVariable Long id, @RequestBody Services updatedService) {
@@ -56,7 +63,7 @@ public class Service_congeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Supprimer un service (Admin)
+    // Supprimer un service (Strictement ADMIN)
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteService(@PathVariable Long id) {

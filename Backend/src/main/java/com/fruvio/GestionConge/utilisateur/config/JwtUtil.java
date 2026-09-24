@@ -1,15 +1,18 @@
 package com.fruvio.GestionConge.utilisateur.config;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Date;
+
+import javax.crypto.SecretKey;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
 
 @Component
 public class JwtUtil {
@@ -17,17 +20,29 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    private final long EXPIRATION_MS = 1000 * 60 * 60 * 8; // 8h
+    private static final long EXPIRATION_MS = 1000L * 60 * 60 * 8; // 8 heures
 
-    // Méthode pour générer dynamiquement la clé à partir de la variable secret
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = (secret != null ? secret.trim() : "").getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            try {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                keyBytes = md.digest(keyBytes);
+            } catch (Exception e) {
+                throw new IllegalStateException("Erreur d'initialisation de la clé JWT", e);
+            }
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String generateToken(String matricule, String role) {
+        if (matricule == null || matricule.trim().isEmpty()) {
+            throw new IllegalArgumentException("Le matricule est obligatoire pour générer un token.");
+        }
+
         return Jwts.builder()
-                .subject(matricule)
-                .claim("role", role)
+                .subject(matricule.trim())
+                .claim("role", role != null ? role : "EMPLOYE")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_MS))
                 .signWith(getSigningKey())
@@ -35,13 +50,25 @@ public class JwtUtil {
     }
 
     public String extractMatricule(String token) {
-        return parseClaims(token).getSubject();
+        try {
+            Claims claims = parseClaims(token);
+            return claims != null ? claims.getSubject() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public boolean isTokenValid(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return false;
+        }
         try {
-            parseClaims(token);
-            return true;
+            Claims claims = parseClaims(token);
+            if (claims == null || claims.getSubject() == null) {
+                return false;
+            }
+            Date expiration = claims.getExpiration();
+            return expiration != null && expiration.after(new Date());
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
@@ -51,7 +78,7 @@ public class JwtUtil {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
-                .parseSignedClaims(token)
+                .parseSignedClaims(token.trim())
                 .getPayload();
     }
 }

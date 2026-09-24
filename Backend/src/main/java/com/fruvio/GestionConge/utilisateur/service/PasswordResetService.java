@@ -1,15 +1,22 @@
 package com.fruvio.GestionConge.utilisateur.service;
 
-import com.fruvio.GestionConge.utilisateur.entity.Utilisateur;
-import com.fruvio.GestionConge.utilisateur.repository.UtilisateurRepository;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
+import com.fruvio.GestionConge.utilisateur.entity.Utilisateur;
+import com.fruvio.GestionConge.utilisateur.repository.UtilisateurRepository;
 
 @Service
 public class PasswordResetService {
+
+    private static final Logger log = LoggerFactory.getLogger(PasswordResetService.class);
 
     private final UtilisateurRepository utilisateurRepository;
     private final EmailService emailService;
@@ -24,43 +31,70 @@ public class PasswordResetService {
     }
 
     /**
-     * Génère un token de réinitialisation et envoie un email avec le lien.
+     * Génère un token de réinitialisation sécurisé et envoie un e-mail sans révéler l'existence du compte.
      */
+    @Transactional
     public void createPasswordResetToken(String email) {
-        Utilisateur user = utilisateurRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Email inconnu"));
+        if (email == null || email.trim().isEmpty()) {
+            return;
+        }
 
-        // Génération du token unique
+        Optional<Utilisateur> userOpt = utilisateurRepository.findByEmail(email.trim());
+        if (userOpt.isEmpty()) {
+            log.info("Demande de réinitialisation de mot de passe pour un e-mail inconnu.");
+            return;
+        }
+
+        Utilisateur user = userOpt.get();
+        if (!user.isActif()) {
+            log.warn("Demande de réinitialisation ignorée pour compte inactif : {}", user.getEmail());
+            return;
+        }
+
         String token = UUID.randomUUID().toString();
         user.setResetToken(token);
-        user.setTokenExpiration(LocalDateTime.now().plusMinutes(30)); // expire dans 30 min
+        user.setTokenExpiration(LocalDateTime.now().plusMinutes(30));
         utilisateurRepository.save(user);
 
-        // Lien de réinitialisation
-        String resetLink = "http://localhost:8080/auth/reset-password?token=" + token;
+        // Lien pointant vers la page Next.js de réinitialisation
+        String resetLink = "http://localhost:3000/Components/mdpReset?token=" + token;
 
-        // Envoi de l'email
-        emailService.sendEmail(
-                user.getEmail(),
-                "Réinitialisation de votre mot de passe",
-                "Bonjour " + user.getNom() + ",\n\n" +
-                "Cliquez sur ce lien pour réinitialiser votre mot de passe : " + resetLink + "\n\n" +
-                "Ce lien expirera dans 30 minutes."
-        );
+        try {
+            emailService.sendEmail(
+                    user.getEmail(),
+                    "Réinitialisation de votre mot de passe - SPAT",
+                    "Bonjour " + (user.getPrenom() != null ? user.getPrenom() : "") + ",\n\n"
+                    + "Une demande de réinitialisation de votre mot de passe a été enregistrée.\n"
+                    + "Cliquez sur ce lien sécurisé pour définir un nouveau mot de passe :\n"
+                    + resetLink + "\n\n"
+                    + "Ce lien expire dans 30 minutes et ne peut être utilisé qu'une seule fois.\n"
+                    + "Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer ce message."
+            );
+        } catch (Exception e) {
+            log.error("Échec d'envoi du mail de réinitialisation à {} : {}", user.getEmail(), e.getMessage());
+        }
     }
 
     /**
-     * Réinitialise le mot de passe si le token est valide et non expiré.
+     * Réinitialise le mot de passe si le token est valide, non expiré, et l'invalide immédiatement.
      */
+    @Transactional
     public void resetPassword(String token, String newPassword) {
-        Utilisateur user = utilisateurRepository.findByResetToken(token)
-                .orElseThrow(() -> new RuntimeException("Token invalide"));
-
-        if (user.getTokenExpiration() == null || user.getTokenExpiration().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Token expiré");
+        if (token == null || token.trim().isEmpty()) {
+            throw new IllegalArgumentException("Le jeton de réinitialisation est obligatoire.");
         }
 
-        // Mise à jour du mot de passe
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new IllegalArgumentException("Le nouveau mot de passe doit comporter au moins 6 caractères.");
+        }
+
+        Utilisateur user = utilisateurRepository.findByResetToken(token.trim())
+                .orElseThrow(() -> new IllegalArgumentException("Jeton de réinitialisation invalide ou expiré."));
+
+        if (user.getTokenExpiration() == null || user.getTokenExpiration().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Jeton de réinitialisation invalide ou expiré.");
+        }
+
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setResetToken(null);
         user.setTokenExpiration(null);

@@ -106,14 +106,16 @@ export default function UtilisateursPage() {
           actif: true,
         });
 
-        const successText = generatedPass
-          ? `Collaborateur créé avec succès ! Mot de passe généré : ${generatedPass}`
-          : "Collaborateur créé avec succès et soldes initialisés !";
-
+        const successText = responseData.message || "Collaborateur créé avec succès et soldes initialisés ! Ses identifiants ont été envoyés par e-mail.";
         setMsg({ type: "success", text: successText });
       } else {
         const txt = await res.text();
-        setMsg({ type: "error", text: txt || "Erreur lors de la création." });
+        let errMsg = txt;
+        try {
+          const parsed = JSON.parse(txt);
+          if (parsed && parsed.message) errMsg = parsed.message;
+        } catch (_) {}
+        setMsg({ type: "error", text: errMsg || "Erreur lors de la création." });
       }
     } catch (err) {
       setMsg({ type: "error", text: `Erreur : ${err.message}` });
